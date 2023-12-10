@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_TFTP_H
-#define HEADER_CURL_TFTP_H
+#ifndef HEADER_CURL_TOOL_IPFS_H
+#define HEADER_CURL_TOOL_IPFS_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -23,11 +23,11 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#ifndef CURL_DISABLE_TFTP
-extern const struct Curl_handler Curl_handler_tftp;
+#include "tool_setup.h"
 
-#define TFTP_BLKSIZE_MIN 8
-#define TFTP_BLKSIZE_MAX 65464
-#endif
+#define MAX_GATEWAY_URL_LEN 10000
 
-#endif /* HEADER_CURL_TFTP_H */
+CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
+                          struct OperationConfig *config);
+
+#endif /* HEADER_CURL_TOOL_IPFS_H */
