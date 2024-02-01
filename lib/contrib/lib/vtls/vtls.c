@@ -1413,17 +1413,13 @@ static size_t multissl_version(char *buffer, size_t size)
     backends_len = p - backends;
   }
 
-  if(!size)
-    return 0;
-
-  if(size <= backends_len) {
-    strncpy(buffer, backends, size - 1);
-    buffer[size - 1] = '\0';
-    return size - 1;
+  if(size) {
+    if(backends_len < size)
+      strcpy(buffer, backends);
+    else
+      *buffer = 0; /* did not fit */
   }
-
-  strcpy(buffer, backends);
-  return backends_len;
+  return 0;
 }
 
 static int multissl_setup(const struct Curl_ssl *backend)
@@ -1719,18 +1715,34 @@ static ssize_t ssl_cf_recv(struct Curl_cfilter *cf,
 {
   struct cf_call_data save;
   ssize_t nread;
+  size_t ntotal = 0;
 
   CF_DATA_SAVE(save, cf, data);
   *err = CURLE_OK;
-  nread = Curl_ssl->recv_plain(cf, data, buf, len, err);
-  if(nread > 0) {
-    DEBUGASSERT((size_t)nread <= len);
-  }
-  else if(nread == 0) {
-    /* eof */
+  /* Do receive until we fill the buffer somehwhat or EGAIN, error or EOF */
+  while(!ntotal || (len - ntotal) > (4*1024)) {
     *err = CURLE_OK;
+    nread = Curl_ssl->recv_plain(cf, data, buf + ntotal, len - ntotal, err);
+    if(nread < 0) {
+      if(*err == CURLE_AGAIN && ntotal > 0) {
+        /* we EAGAINed after having reed data, return the success amount */
+        *err = CURLE_OK;
+        break;
+      }
+      /* we have a an error to report */
+      goto out;
+    }
+    else if(nread == 0) {
+      /* eof */
+      break;
+    }
+    ntotal += (size_t)nread;
+    DEBUGASSERT((size_t)ntotal <= len);
   }
-  CURL_TRC_CF(data, cf, "cf_recv(len=%zu) -> %zd, %d", len, nread, *err);
+  nread = (ssize_t)ntotal;
+out:
+  CURL_TRC_CF(data, cf, "cf_recv(len=%zu) -> %zd, %d", len,
+              nread, *err);
   CF_DATA_RESTORE(cf, save);
   return nread;
 }
