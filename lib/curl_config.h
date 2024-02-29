@@ -19,20 +19,35 @@
 /* disable alt-svc */
 /* #undef CURL_DISABLE_ALTSVC */
 
+/* to disable AWS sig support */
+/* #undef CURL_DISABLE_AWS */
+
+/* to disable basic authentication */
+/* #undef CURL_DISABLE_BASIC_AUTH */
+
+/* to disable bearer authentication */
+/* #undef CURL_DISABLE_BEARER_AUTH */
+
+/* disable local binding support */
+/* #undef CURL_DISABLE_BINDLOCAL */
+
 /* to disable cookies support */
 /* #undef CURL_DISABLE_COOKIES */
 
-/* to disable cryptographic authentication */
-/* #undef CURL_DISABLE_CRYPTO_AUTH */
-
 /* to disable DICT */
 /* #undef CURL_DISABLE_DICT */
+
+/* to disable digest authentication */
+/* #undef CURL_DISABLE_DIGEST_AUTH */
 
 /* disable DoH */
 /* #undef CURL_DISABLE_DOH */
 
 /* to disable FILE */
 /* #undef CURL_DISABLE_FILE */
+
+/* disable form API */
+/* #undef CURL_DISABLE_FORM_API */
 
 /* to disable FTP */
 /* #undef CURL_DISABLE_FTP */
@@ -58,6 +73,9 @@
 /* to disable IMAP */
 /* #undef CURL_DISABLE_IMAP */
 
+/* to disable kerberos authentication */
+/* #undef CURL_DISABLE_KERBEROS_AUTH */
+
 /* to disable LDAP */
 #define CURL_DISABLE_LDAP 1
 
@@ -72,6 +90,9 @@
 
 /* to disable MQTT */
 /* #undef CURL_DISABLE_MQTT */
+
+/* to disable negotiate authentication */
+/* #undef CURL_DISABLE_NEGOTIATE_AUTH */
 
 /* disable netrc parsing */
 /* #undef CURL_DISABLE_NETRC */
@@ -179,6 +200,9 @@
 /* Define to 1 if you have the <crypto.h> header file. */
 /* #undef HAVE_CRYPTO_H */
 
+/* Define to 1 if you have the fseeko declaration */
+#define HAVE_DECL_FSEEKO 1
+
 /* Define to 1 if you have the declaration of `getpwuid_r', and to 0 if you
    don't. */
 #define HAVE_DECL_GETPWUID_R 1
@@ -191,9 +215,6 @@
 
 /* Define to 1 if you have the <err.h> header file. */
 /* #undef HAVE_ERR_H */
-
-/* Define to 1 if you have the `fchmod' function. */
-#define HAVE_FCHMOD 1
 
 /* Define to 1 if you have the fcntl function. */
 #define HAVE_FCNTL 1
@@ -303,12 +324,6 @@
 /* if you have GNU GSS */
 /* #undef HAVE_GSSGNU */
 
-/* if you have Heimdal */
-/* #undef HAVE_GSSHEIMDAL */
-
-/* if you have MIT Kerberos */
-/* #undef HAVE_GSSMIT */
-
 /* Define to 1 if you have the <hyper.h> header file. */
 /* #undef HAVE_HYPER_H */
 
@@ -381,6 +396,9 @@
 
 /* Define to 1 if you have the `idn2' library (-lidn2). */
 /* #undef HAVE_LIBIDN2 */
+
+/* Define to 1 if you have the <libpsl.h> header file. */
+/* #undef HAVE_LIBPSL_H */
 
 /* Define to 1 if using libressl. */
 /* #undef HAVE_LIBRESSL */
@@ -472,6 +490,9 @@
 
 /* Define to 1 if you have the <openssl/pem.h> header file. */
 /* #undef HAVE_OPENSSL_PEM_H */
+
+/* if you have the functions OSSL_QUIC_client_method */
+/* #undef HAVE_OPENSSL_QUIC */
 
 /* Define to 1 if you have the <openssl/rsa.h> header file. */
 /* #undef HAVE_OPENSSL_RSA_H */
@@ -581,6 +602,10 @@
 
 /* Define to 1 if you have the `SSL_set0_wbio' function. */
 /* #undef HAVE_SSL_SET0_WBIO */
+
+/* Define to 1 if you have the `SSL_set_quic_use_legacy_codepoint' function.
+   */
+/* #undef HAVE_SSL_SET_QUIC_USE_LEGACY_CODEPOINT */
 
 /* Define to 1 if you have the <stdatomic.h> header file. */
 #define HAVE_STDATOMIC_H 1
@@ -702,18 +727,6 @@
 /* Define to 1 if you have the <utime.h> header file. */
 #define HAVE_UTIME_H 1
 
-/* Define to 1 if compiler supports C99 variadic macro style. */
-#define HAVE_VARIADIC_MACROS_C99 1
-
-/* Define to 1 if compiler supports old gcc variadic macro style. */
-#define HAVE_VARIADIC_MACROS_GCC 1
-
-/* Define to 1 if you have the windows.h header file. */
-/* #undef HAVE_WINDOWS_H */
-
-/* Define to 1 if you have the winsock2.h header file. */
-/* #undef HAVE_WINSOCK2_H */
-
 /* Define to 1 if you have the <wolfssh/ssh.h> header file. */
 /* #undef HAVE_WOLFSSH_SSH_H */
 
@@ -731,9 +744,6 @@
 
 /* Define this symbol if your OS supports changing the contents of argv */
 #define HAVE_WRITABLE_ARGV 1
-
-/* Define to 1 if you have the ws2tcpip.h header file. */
-/* #undef HAVE_WS2TCPIP_H */
 
 /* Define to 1 if you have the <x509.h> header file. */
 /* #undef HAVE_X509_H */
@@ -795,6 +805,9 @@
 /* Size of curl_off_t in number of bytes */
 #define SIZEOF_CURL_OFF_T 8
 
+/* Size of curl_socket_t in number of bytes */
+#define SIZEOF_CURL_SOCKET_T 4
+
 /* Size of int in number of bytes */
 #define SIZEOF_INT 4
 
@@ -843,7 +856,7 @@
 /* if hyper is in use */
 /* #undef USE_HYPER */
 
-/* PSL support enabled */
+/* if libpsl is in use */
 /* #undef USE_LIBPSL */
 
 /* if librtmp is in use */
@@ -873,6 +886,9 @@
 /* if ngtcp2 is in use */
 /* #undef USE_NGTCP2 */
 
+/* if ngtcp2_crypto_boringssl is in use */
+/* #undef USE_NGTCP2_CRYPTO_BORINGSSL */
+
 /* if ngtcp2_crypto_gnutls is in use */
 /* #undef USE_NGTCP2_CRYPTO_GNUTLS */
 
@@ -882,11 +898,20 @@
 /* if ngtcp2_crypto_wolfssl is in use */
 /* #undef USE_NGTCP2_CRYPTO_WOLFSSL */
 
+/* if ngtcp2 + nghttp3 is in use */
+/* #undef USE_NGTCP2_H3 */
+
 /* Use OpenLDAP-specific code */
 /* #undef USE_OPENLDAP */
 
 /* if OpenSSL is in use */
 /* #undef USE_OPENSSL */
+
+/* if openssl quic + nghttp3 is in use */
+/* #undef USE_OPENSSL_H3 */
+
+/* if openssl QUIC is in use */
+/* #undef USE_OPENSSL_QUIC */
 
 /* if quiche is in use */
 /* #undef USE_QUICHE */

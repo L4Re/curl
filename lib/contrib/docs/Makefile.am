@@ -24,11 +24,13 @@
 
 AUTOMAKE_OPTIONS = foreign no-dependencies
 
-# EXTRA_DIST breaks with $(abs_builddir) so build it using this variable
-# but distribute it (using the relative file name) in the next variable
-man_MANS = $(abs_builddir)/curl.1
-noinst_man_MANS = curl.1 mk-ca-bundle.1
-dist_man_MANS = curl-config.1
+if BUILD_DOCS
+# if we disable man page building, ignore these
+MK_CA_DOCS = mk-ca-bundle.1
+CURLCONF_DOCS = curl-config.1
+endif
+
+man_MANS = $(abs_builddir)/curl.1 curl-config.1
 CURLPAGES = curl-config.md mk-ca-bundle.md
 
 # Build targets in this file (.) before cmdline-opts to ensure that
@@ -36,11 +38,13 @@ CURLPAGES = curl-config.md mk-ca-bundle.md
 SUBDIRS = . cmdline-opts libcurl
 DIST_SUBDIRS = $(SUBDIRS) examples
 
-CLEANFILES = $(man_MANS) curl.1 curl-config.1 mk-ca-bundle.1
-nodist_MANS = $(CLEANFILES)
+if BUILD_DOCS
+CLEANFILES = curl.1 mk-ca-bundle.1 curl-config.1
+endif
 
 EXTRA_DIST =                                    \
  $(CURLPAGES)                                   \
+ $(CURLCONF_DOCS)                               \
  ALTSVC.md                                      \
  BINDINGS.md                                    \
  BUFREF.md                                      \
@@ -52,6 +56,7 @@ EXTRA_DIST =                                    \
  CODE_OF_CONDUCT.md                             \
  CODE_REVIEW.md                                 \
  CODE_STYLE.md                                  \
+ CLIENT-READERS.md                              \
  CLIENT-WRITERS.md                              \
  CONNECTION-FILTERS.md                          \
  CONTRIBUTE.md                                  \
@@ -105,6 +110,8 @@ CD2_ = $(CD2_0)
 
 SUFFIXES = .1 .md
 
+all: $(MK_CA_DOCS)
+
 # $(abs_builddir) is to disable VPATH when searching for this file, which
 # would otherwise find the copy in $(srcdir) which breaks the $(HUGE)
 # rule in src/Makefile.am in out-of-tree builds that references the file in the
@@ -124,5 +131,10 @@ $(abs_builddir)/curl.1:
 
 curl-config.1: curl-config.md
 
+mk-ca-bundle.1: mk-ca-bundle.md
+
 distclean:
 	rm -f $(CLEANFILES)
+
+dist-hook:
+	cp $(builddir)/curl.1 $(builddir)/curl.1.dist

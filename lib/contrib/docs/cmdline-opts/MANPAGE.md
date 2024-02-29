@@ -22,8 +22,8 @@ to markdown which is why it uses `.md` file extensions.
 ## Option files
 
 Each command line option is described in a file named `<long name>.d`, where
-option name is written without any prefixing dashes. Like the file name for
-the `-v, --verbose` option is named `verbose.d`.
+option name is written without any prefixing dashes. Like the filename for the
+`-v, --verbose` option is named `verbose.d`.
 
 Each file has a set of meta-data in the top of the file, followed by a body of
 text.
@@ -82,6 +82,9 @@ The list is automatically terminated at end of file, or you can do it
 explicitly with an empty "header":
 
     ##
+
+Angle brackets (`<>`) need to be escaped when used in text like `\<` and
+`\>`. This, to ensure that the text renders nicely as markdown.
 
 ### Headers
 
