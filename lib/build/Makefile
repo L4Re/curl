@@ -5,7 +5,6 @@ TARGET             = libcurl.a libcurl.so
 PC_FILENAME        = libcurl
 REQUIRES_LIBS      = libpthread libc_support_misc # gethostname() -> uname()
 REQUIRES_LIBS     += zlib
-DEPENDS_PKGS       = $(REQUIRES_LIBS) lwip
 DEFINES            = -DHAVE_CONFIG_H=1 -DBUILDING_LIBCURL
 
 CONTRIB_INCDIR     = curl/contrib/include
