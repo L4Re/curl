@@ -86,6 +86,7 @@ static int
 read_cb(void *userdata, uint8_t *buf, uintptr_t len, uintptr_t *out_n)
 {
   struct io_ctx *io_ctx = userdata;
+  struct ssl_connect_data *const connssl = io_ctx->cf->ctx;
   CURLcode result;
   int ret = 0;
   ssize_t nread = Curl_conn_cf_recv(io_ctx->cf->next, io_ctx->data,
@@ -97,6 +98,8 @@ read_cb(void *userdata, uint8_t *buf, uintptr_t len, uintptr_t *out_n)
     else
       ret = EINVAL;
   }
+  else if(nread == 0)
+    connssl->peer_closed = TRUE;
   *out_n = (int)nread;
   return ret;
 }
@@ -292,7 +295,7 @@ cr_send(struct Curl_cfilter *cf, struct Curl_easy *data,
   DEBUGASSERT(backend);
   rconn = backend->conn;
 
-  CURL_TRC_CF(data, cf, "cf_send: %ld plain bytes", plainlen);
+  CURL_TRC_CF(data, cf, "cf_send: %zu plain bytes", plainlen);
 
   io_ctx.cf = cf;
   io_ctx.data = data;
@@ -343,7 +346,7 @@ cr_send(struct Curl_cfilter *cf, struct Curl_easy *data,
 
 /* A server certificate verify callback for rustls that always returns
    RUSTLS_RESULT_OK, or in other words disable certificate verification. */
-static enum rustls_result
+static uint32_t
 cr_verify_none(void *userdata UNUSED_PARAM,
                const rustls_verify_server_cert_params *params UNUSED_PARAM)
 {
@@ -354,12 +357,12 @@ static bool
 cr_hostname_is_ip(const char *hostname)
 {
   struct in_addr in;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
   struct in6_addr in6;
   if(Curl_inet_pton(AF_INET6, hostname, &in6) > 0) {
     return true;
   }
-#endif /* ENABLE_IPV6 */
+#endif /* USE_IPV6 */
   if(Curl_inet_pton(AF_INET, hostname, &in) > 0) {
     return true;
   }
@@ -697,7 +700,7 @@ cr_close(struct Curl_cfilter *cf, struct Curl_easy *data)
 
   DEBUGASSERT(backend);
 
-  if(backend->conn) {
+  if(backend->conn && !connssl->peer_closed) {
     rustls_connection_send_close_notify(backend->conn);
     n = cr_send(cf, data, NULL, 0, &tmperr);
     if(n < 0) {

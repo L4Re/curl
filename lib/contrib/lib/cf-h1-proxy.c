@@ -114,17 +114,11 @@ static CURLcode tunnel_init(struct Curl_cfilter *cf,
                             struct h1_tunnel_state **pts)
 {
   struct h1_tunnel_state *ts;
-  CURLcode result;
 
   if(cf->conn->handler->flags & PROTOPT_NOTCPPROXY) {
     failf(data, "%s cannot be done over CONNECT", cf->conn->handler->scheme);
     return CURLE_UNSUPPORTED_PROTOCOL;
   }
-
-  /* we might need the upload buffer for streaming a partial request */
-  result = Curl_get_upload_buffer(data);
-  if(result)
-    return result;
 
   ts = calloc(1, sizeof(*ts));
   if(!ts)
@@ -243,6 +237,8 @@ static CURLcode start_CONNECT(struct Curl_cfilter *cf,
   http_minor = (cf->conn->http_proxy.proxytype == CURLPROXY_HTTP_1_0) ? 0 : 1;
 
   result = Curl_h1_req_write_head(req, http_minor, &ts->request_data);
+  if(!result)
+    result = Curl_creader_set_null(data);
 
 out:
   if(result)
@@ -755,6 +751,10 @@ static CURLcode start_CONNECT(struct Curl_cfilter *cf,
   if(result)
     goto error;
 
+  result = Curl_creader_set_null(data);
+  if(result)
+    goto error;
+
   sendtask = hyper_clientconn_send(client, req);
   if(!sendtask) {
     failf(data, "hyper_clientconn_send");
@@ -838,9 +838,9 @@ static CURLcode recv_CONNECT_resp(struct Curl_cfilter *cf,
   int didwhat;
 
   (void)ts;
-  *done = FALSE;
-  result = Curl_hyper_stream(data, cf->conn, &didwhat, done,
+  result = Curl_hyper_stream(data, cf->conn, &didwhat,
                              CURL_CSELECT_IN | CURL_CSELECT_OUT);
+  *done = data->req.done;
   if(result || !*done)
     return result;
   if(h->exec) {
@@ -924,6 +924,7 @@ static CURLcode H1_CONNECT(struct Curl_cfilter *cf,
          * If the other side indicated a connection close, or if someone
          * else told us to close this connection, do so now.
          */
+        Curl_req_soft_reset(&data->req, data);
         if(ts->close_connection || conn->bits.close) {
           /* Close this filter and the sub-chain, re-connect the
            * sub-chain and continue. Closing this filter will
@@ -1009,10 +1010,8 @@ out:
   *done = (result == CURLE_OK) && tunnel_is_established(cf->ctx);
   if(*done) {
     cf->connected = TRUE;
-    /* Restore `data->req` fields that may habe been touched */
-    data->req.header = TRUE; /* assume header */
-    data->req.bytecount = 0;
-    data->req.ignorebody = FALSE;
+    /* The real request will follow the CONNECT, reset request partially */
+    Curl_req_soft_reset(&data->req, data);
     Curl_client_reset(data);
     Curl_pgrsSetUploadCounter(data, 0);
     Curl_pgrsSetDownloadCounter(data, 0);
@@ -1069,7 +1068,7 @@ static void cf_h1_proxy_close(struct Curl_cfilter *cf,
 
 struct Curl_cftype Curl_cft_h1_proxy = {
   "H1-PROXY",
-  CF_TYPE_IP_CONNECT,
+  CF_TYPE_IP_CONNECT|CF_TYPE_PROXY,
   0,
   cf_h1_proxy_destroy,
   cf_h1_proxy_connect,

@@ -1,3 +1,9 @@
+<!--
+Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+
+SPDX-License-Identifier: curl
+-->
+
 # curl vulnerability disclosure policy
 
 This document describes how security vulnerabilities are handled in the curl
@@ -59,7 +65,8 @@ announcement.
   [SECURITY-ADVISORY](https://curl.se/dev/advisory.html) for help on creating
   the advisory.
 
-- Request a CVE number from HackerOne
+- Request a CVE Id for the issue. curl is a CNA (CVE Numbering Authority) and
+  can request its own numbers.
 
 - Update the "security advisory" with the CVE number.
 

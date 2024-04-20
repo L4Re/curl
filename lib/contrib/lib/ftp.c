@@ -177,6 +177,7 @@ const struct Curl_handler Curl_handler_ftp = {
   ZERO_NULL,                       /* perform_getsock */
   ftp_disconnect,                  /* disconnect */
   ZERO_NULL,                       /* write_resp */
+  ZERO_NULL,                       /* write_resp_hd */
   ZERO_NULL,                       /* connection_check */
   ZERO_NULL,                       /* attach connection */
   PORT_FTP,                        /* defport */
@@ -208,6 +209,7 @@ const struct Curl_handler Curl_handler_ftps = {
   ZERO_NULL,                       /* perform_getsock */
   ftp_disconnect,                  /* disconnect */
   ZERO_NULL,                       /* write_resp */
+  ZERO_NULL,                       /* write_resp_hd */
   ZERO_NULL,                       /* connection_check */
   ZERO_NULL,                       /* attach connection */
   PORT_FTPS,                       /* defport */
@@ -272,8 +274,8 @@ static CURLcode ftp_cw_lc_write(struct Curl_easy *data,
                                 struct Curl_cwriter *writer, int type,
                                 const char *buf, size_t blen)
 {
-  static char nl = '\n';
-  struct ftp_cw_lc_ctx *ctx = (struct ftp_cw_lc_ctx *)writer;
+  static const char nl = '\n';
+  struct ftp_cw_lc_ctx *ctx = writer->ctx;
 
   if(!(type & CLIENTWRITE_BODY) ||
      data->conn->proto.ftpc.transfertype != 'A')
@@ -360,7 +362,7 @@ static CURLcode AcceptServerConnect(struct Curl_easy *data)
   struct connectdata *conn = data->conn;
   curl_socket_t sock = conn->sock[SECONDARYSOCKET];
   curl_socket_t s = CURL_SOCKET_BAD;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
   struct Curl_sockaddr_storage add;
 #else
   struct sockaddr_in add;
@@ -386,8 +388,10 @@ static CURLcode AcceptServerConnect(struct Curl_easy *data)
   (void)curlx_nonblock(s, TRUE); /* enable non-blocking */
   /* Replace any filter on SECONDARY with one listening on this socket */
   result = Curl_conn_tcp_accepted_set(data, conn, SECONDARYSOCKET, &s);
-  if(result)
+  if(result) {
+    sclose(s);
     return result;
+  }
 
   if(data->set.fsockopt) {
     int error = 0;
@@ -1027,7 +1031,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
   char hbuf[NI_MAXHOST];
   struct sockaddr *sa = (struct sockaddr *)&ss;
   struct sockaddr_in * const sa4 = (void *)sa;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
   struct sockaddr_in6 * const sa6 = (void *)sa;
 #endif
   static const char mode[][5] = { "EPRT", "PORT" };
@@ -1054,7 +1058,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
      (strlen(data->set.str[STRING_FTPPORT]) > 1)) {
     char *ip_end = NULL;
 
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
     if(*string_ftpport == '[') {
       /* [ipv6]:port(-range) */
       char *ip_start = string_ftpport + 1;
@@ -1076,7 +1080,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
         if(ip_end) {
           /* either ipv6 or (ipv4|domain|interface):port(-range) */
           addrlen = ip_end - string_ftpport;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
           if(Curl_inet_pton(AF_INET6, string_ftpport, &sa6->sin6_addr) == 1) {
             /* ipv6 */
             port_min = port_max = 0;
@@ -1122,7 +1126,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
 
       /* attempt to get the address of the given interface name */
       switch(Curl_if2ip(conn->remote_addr->family,
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
                         Curl_ipv6_scope(&conn->remote_addr->sa_addr),
                         conn->scope_id,
 #endif
@@ -1154,7 +1158,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
       goto out;
     }
     switch(sa->sa_family) {
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
     case AF_INET6:
       r = Curl_inet_ntop(sa->sa_family, &sa6->sin6_addr, hbuf, sizeof(hbuf));
       break;
@@ -1214,7 +1218,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
   for(port = port_min; port <= port_max;) {
     if(sa->sa_family == AF_INET)
       sa4->sin_port = htons(port);
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
     else
       sa6->sin6_port = htons(port);
 #endif
@@ -1282,7 +1286,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
      below */
   Curl_printable_address(ai, myhost, sizeof(myhost));
 
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
   if(!conn->bits.ftp_use_eprt && conn->bits.ipv6)
     /* EPRT is disabled but we are connected to a IPv6 host, so we ignore the
        request and enable EPRT again! */
@@ -1309,7 +1313,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
     case AF_INET:
       port = ntohs(sa4->sin_port);
       break;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
     case AF_INET6:
       port = ntohs(sa6->sin6_port);
       break;
@@ -1683,10 +1687,10 @@ static CURLcode ftp_state_ul_setup(struct Curl_easy *data,
     append = TRUE;
 
     /* Let's read off the proper amount of bytes from the input. */
-    if(conn->seek_func) {
+    if(data->set.seek_func) {
       Curl_set_in_callback(data, true);
-      seekerr = conn->seek_func(conn->seek_client, data->state.resume_from,
-                                SEEK_SET);
+      seekerr = data->set.seek_func(data->set.seek_client,
+                                    data->state.resume_from, SEEK_SET);
       Curl_set_in_callback(data, false);
     }
 
@@ -1903,7 +1907,7 @@ static char *control_address(struct connectdata *conn)
   if(conn->bits.tunnel_proxy || conn->bits.socksproxy)
     return conn->host.name;
 #endif
-  return conn->primary_ip;
+  return conn->primary.remote_ip;
 }
 
 static bool match_pasv_6nums(const char *p,
@@ -2040,14 +2044,14 @@ static CURLcode ftp_state_pasv_resp(struct Curl_easy *data,
      */
     const char * const host_name = conn->bits.socksproxy ?
       conn->socks_proxy.host.name : conn->http_proxy.host.name;
-    rc = Curl_resolv(data, host_name, conn->port, FALSE, &addr);
+    rc = Curl_resolv(data, host_name, conn->primary.remote_port, FALSE, &addr);
     if(rc == CURLRESOLV_PENDING)
       /* BLOCKING, ignores the return code but 'addr' will be NULL in
          case of failure */
       (void)Curl_resolver_wait_resolv(data, &addr);
 
-    connectport =
-      (unsigned short)conn->port; /* we connect to the proxy's port */
+    /* we connect to the proxy's port */
+    connectport = (unsigned short)conn->primary.remote_port;
 
     if(!addr) {
       failf(data, "Can't resolve proxy host %s:%hu", host_name, connectport);

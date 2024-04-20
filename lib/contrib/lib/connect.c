@@ -145,19 +145,19 @@ timediff_t Curl_timeleft(struct Curl_easy *data,
 /* Copies connection info into the transfer handle to make it available when
    the transfer handle is no longer associated with the connection. */
 void Curl_persistconninfo(struct Curl_easy *data, struct connectdata *conn,
-                          char *local_ip, int local_port)
+                          struct ip_quadruple *ip)
 {
-  memcpy(data->info.conn_primary_ip, conn->primary_ip, MAX_IPADR_LEN);
-  if(local_ip && local_ip[0])
-    memcpy(data->info.conn_local_ip, local_ip, MAX_IPADR_LEN);
-  else
-    data->info.conn_local_ip[0] = 0;
+  if(ip)
+    data->info.primary = *ip;
+  else {
+    memset(&data->info.primary, 0, sizeof(data->info.primary));
+    data->info.primary.remote_port = -1;
+    data->info.primary.local_port = -1;
+  }
   data->info.conn_scheme = conn->handler->scheme;
   /* conn_protocol can only provide "old" protocols */
   data->info.conn_protocol = (conn->handler->protocol) & CURLPROTO_MASK;
-  data->info.conn_primary_port = conn->port;
   data->info.conn_remote_port = conn->remote_port;
-  data->info.conn_local_port = local_port;
   data->info.used_proxy =
 #ifdef CURL_DISABLE_PROXY
     0
@@ -195,7 +195,7 @@ bool Curl_addr2string(struct sockaddr *sa, curl_socklen_t salen,
                       char *addr, int *port)
 {
   struct sockaddr_in *si = NULL;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
   struct sockaddr_in6 *si6 = NULL;
 #endif
 #if (defined(HAVE_SYS_UN_H) || defined(WIN32_SOCKADDR_UN)) && defined(AF_UNIX)
@@ -214,7 +214,7 @@ bool Curl_addr2string(struct sockaddr *sa, curl_socklen_t salen,
         return TRUE;
       }
       break;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
     case AF_INET6:
       si6 = (struct sockaddr_in6 *)(void *) sa;
       if(Curl_inet_ntop(sa->sa_family, &si6->sin6_addr,
@@ -401,7 +401,7 @@ static CURLcode eyeballer_new(struct eyeballer **pballer,
     return CURLE_OUT_OF_MEMORY;
 
   baller->name = ((ai_family == AF_INET)? "ipv4" : (
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
                   (ai_family == AF_INET6)? "ipv6" :
 #endif
                   "ip"));
@@ -728,7 +728,7 @@ evaluate:
 
   failf(data, "Failed to connect to %s port %u after "
         "%" CURL_FORMAT_TIMEDIFF_T " ms: %s",
-        hostname, conn->port,
+        hostname, conn->primary.remote_port,
         Curl_timediff(now, data->progress.t_startsingle),
         curl_easy_strerror(result));
 
@@ -779,7 +779,7 @@ static CURLcode start_connect(struct Curl_cfilter *cf,
     /* any IP version is allowed */
     ai_family0 = remotehost->addr?
       remotehost->addr->ai_family : 0;
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
     ai_family1 = ai_family0 == AF_INET6 ?
       AF_INET : AF_INET6;
 #else
@@ -790,7 +790,7 @@ static CURLcode start_connect(struct Curl_cfilter *cf,
     /* only one IP version is allowed */
     ai_family0 = (conn->ip_version == CURL_IPRESOLVE_V4) ?
       AF_INET :
-#ifdef ENABLE_IPV6
+#ifdef USE_IPV6
       AF_INET6;
 #else
       AF_UNSPEC;
@@ -918,7 +918,7 @@ static CURLcode cf_he_connect(struct Curl_cfilter *cf,
 
         if(cf->conn->handler->protocol & PROTO_FAMILY_SSH)
           Curl_pgrsTime(data, TIMER_APPCONNECT); /* we're connected already */
-        Curl_verboseconnect(data, cf->conn);
+        Curl_verboseconnect(data, cf->conn, cf->sockindex);
         data->info.numconnects++; /* to track the # of connections made */
       }
       break;
@@ -1117,7 +1117,7 @@ const
 #endif
 struct transport_provider transport_providers[] = {
   { TRNSPRT_TCP, Curl_cf_tcp_create },
-#ifdef ENABLE_QUIC
+#ifdef USE_HTTP3
   { TRNSPRT_QUIC, Curl_cf_quic_create },
 #endif
 #ifndef CURL_DISABLE_TFTP

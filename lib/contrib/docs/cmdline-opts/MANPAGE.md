@@ -6,7 +6,7 @@
 
 # curl man page generator
 
-This is the curl man page generator. It generates a single nroff man page
+`managen` is the curl man page generator. It generates a single nroff man page
 output from the set of sources files in this directory.
 
 The `mainpage.idx` file lists all files that are rendered in that order to
@@ -88,7 +88,7 @@ Angle brackets (`<>`) need to be escaped when used in text like `\<` and
 
 ### Headers
 
-The `#` header can be used by non-option files and it produces produces a
+The `#` header can be used by non-option files and it produces a
 `.SH` output.
 
 If the `#` header is used for a command line option file, that header is
@@ -103,11 +103,16 @@ getting spellchecked by CI jobs): `%DATE`, `%VERSION` and `%GLOBALS`.
 
 ## Generate
 
-`./gen.pl mainpage`
+`managen mainpage [list of markdown option file names]`
 
 This command outputs a single huge nroff file, meant to become `curl.1`. The
 full curl man page.
 
-`./gen.pl listhelp`
+`managen ascii [list of markdown option file names]`
+
+This command outputs a single text file, meant to become `curl.txt`. The full
+curl man page in text format, used to build `tool_hugehelp.c`.
+
+`managen listhelp`
 
 Generates a full `curl --help` output for all known command line options.

@@ -1,3 +1,9 @@
+<!--
+Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+
+SPDX-License-Identifier: curl
+-->
+
 # HTTP3 (and QUIC)
 
 ## Resources
@@ -232,6 +238,15 @@ Build curl:
      % LDFLAGS="-Wl,-rpath,<somewhere>/lib" ./configure --with-openssl=<somewhere> --with-openssl-quic --with-nghttp3=<somewhere2> 
      % make
      % make install
+
+You can build curl with cmake:
+
+     % cd ..
+     % git clone https://github.com/curl/curl
+     % cd curl
+     % cmake . -B build -DCURL_USE_OPENSSL=ON -DUSE_OPENSSL_QUIC=ON
+     % cmake --build build
+     % cmake --install build
 
  If `make install` results in `Permission denied` error, you need to prepend
  it with `sudo`.

@@ -426,6 +426,7 @@ static void remove_expired(struct CookieInfo *cookies)
   }
 }
 
+#ifndef USE_LIBPSL
 /* Make sure domain contains a dot or is localhost. */
 static bool bad_domain(const char *domain, size_t len)
 {
@@ -443,6 +444,7 @@ static bool bad_domain(const char *domain, size_t len)
   }
   return TRUE;
 }
+#endif
 
 /*
   RFC 6265 section 4.1.1 says a server should accept this range:
@@ -884,7 +886,8 @@ Curl_cookie_add(struct Curl_easy *data,
      * Now loop through the fields and init the struct we already have
      * allocated
      */
-    for(ptr = firstptr, fields = 0; ptr && !badcookie;
+    fields = 0;
+    for(ptr = firstptr; ptr && !badcookie;
         ptr = strtok_r(NULL, "\t", &tok_buf), fields++) {
       switch(fields) {
       case 0:
@@ -1040,7 +1043,7 @@ Curl_cookie_add(struct Curl_easy *data,
         Curl_psl_release(data);
       }
       else
-        acceptable = !bad_domain(domain, strlen(domain));
+        infof(data, "libpsl problem, rejecting cookie for satety");
     }
 
     if(!acceptable) {

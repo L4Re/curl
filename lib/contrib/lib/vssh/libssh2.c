@@ -139,6 +139,7 @@ const struct Curl_handler Curl_handler_scp = {
   ssh_getsock,                          /* perform_getsock */
   scp_disconnect,                       /* disconnect */
   ZERO_NULL,                            /* write_resp */
+  ZERO_NULL,                            /* write_resp_hd */
   ZERO_NULL,                            /* connection_check */
   ssh_attach,                           /* attach */
   PORT_SSH,                             /* defport */
@@ -168,6 +169,7 @@ const struct Curl_handler Curl_handler_sftp = {
   ssh_getsock,                          /* perform_getsock */
   sftp_disconnect,                      /* disconnect */
   ZERO_NULL,                            /* write_resp */
+  ZERO_NULL,                            /* write_resp_hd */
   ZERO_NULL,                            /* connection_check */
   ssh_attach,                           /* attach */
   PORT_SSH,                             /* defport */
@@ -201,7 +203,8 @@ kbd_callback(const char *name, int name_len, const char *instruction,
   if(num_prompts == 1) {
     struct connectdata *conn = data->conn;
     responses[0].text = strdup(conn->passwd);
-    responses[0].length = curlx_uztoui(strlen(conn->passwd));
+    responses[0].length =
+      responses[0].text == NULL ? 0 : curlx_uztoui(strlen(conn->passwd));
   }
   (void)prompts;
 } /* kbd_callback */
@@ -2142,10 +2145,10 @@ static CURLcode ssh_statemach_act(struct Curl_easy *data, bool *block)
          position. */
       if(data->state.resume_from > 0) {
         /* Let's read off the proper amount of bytes from the input. */
-        if(conn->seek_func) {
+        if(data->set.seek_func) {
           Curl_set_in_callback(data, true);
-          seekerr = conn->seek_func(conn->seek_client, data->state.resume_from,
-                                    SEEK_SET);
+          seekerr = data->set.seek_func(data->set.seek_client,
+                                        data->state.resume_from, SEEK_SET);
           Curl_set_in_callback(data, false);
         }
 
@@ -3272,7 +3275,7 @@ static CURLcode ssh_connect(struct Curl_easy *data, bool *done)
 #endif /* CURL_LIBSSH2_DEBUG */
 
   /* libcurl MUST to set custom memory functions so that the kbd_callback
-     funciton's memory allocations can be properled freed */
+     function's memory allocations can be properly freed */
   sshc->ssh_session = libssh2_session_init_ex(my_libssh2_malloc,
                                               my_libssh2_free,
                                               my_libssh2_realloc, data);

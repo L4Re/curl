@@ -182,6 +182,7 @@ const struct Curl_handler Curl_handler_tftp = {
   ZERO_NULL,                            /* perform_getsock */
   tftp_disconnect,                      /* disconnect */
   ZERO_NULL,                            /* write_resp */
+  ZERO_NULL,                            /* write_resp_hd */
   ZERO_NULL,                            /* connection_check */
   ZERO_NULL,                            /* attach connection */
   PORT_TFTP,                            /* defport */
@@ -452,8 +453,6 @@ static CURLcode tftp_send_first(struct tftp_state_data *state,
     if(data->state.upload) {
       /* If we are uploading, send an WRQ */
       setpacketevent(&state->spacket, TFTP_EVENT_WRQ);
-      state->data->req.upload_fromhere =
-        (char *)state->spacket.data + 4;
       if(data->state.infilesize != -1)
         Curl_pgrsSetUploadSize(data, data->state.infilesize);
     }

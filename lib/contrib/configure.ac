@@ -51,6 +51,7 @@ CURL_CHECK_OPTION_CURLDEBUG
 CURL_CHECK_OPTION_SYMBOL_HIDING
 CURL_CHECK_OPTION_ARES
 CURL_CHECK_OPTION_RT
+CURL_CHECK_OPTION_HTTPSRR
 CURL_CHECK_OPTION_ECH
 
 XC_CHECK_PATH_SEPARATOR
@@ -999,28 +1000,6 @@ AS_HELP_STRING([--disable-mqtt],[Disable MQTT support]),
 )
 
 dnl **********************************************************************
-dnl Check whether to build documentation
-dnl **********************************************************************
-
-AC_MSG_CHECKING([whether to build documentation])
-AC_ARG_ENABLE(docs,
-AS_HELP_STRING([--enable-docs],[Enable documentation])
-AS_HELP_STRING([--disable-docs],[Disable documentation]),
-[ case "$enableval" in
-  no)
-       AC_MSG_RESULT(no)
-       BUILD_DOCS=0
-       curl_docs_msg="no"
-       ;;
-  *)   AC_MSG_RESULT(yes)
-       BUILD_DOCS=1
-       ;;
-  esac ],
-       AC_MSG_RESULT(yes)
-       BUILD_DOCS=1
-)
-
-dnl **********************************************************************
 dnl Check for built-in manual
 dnl **********************************************************************
 
@@ -1041,6 +1020,31 @@ AS_HELP_STRING([--disable-manual],[Disable built-in manual]),
 )
 dnl The actual use of the USE_MANUAL variable is done much later in this
 dnl script to allow other actions to disable it as well.
+
+dnl **********************************************************************
+dnl Check whether to build documentation
+dnl **********************************************************************
+
+AC_MSG_CHECKING([whether to build documentation])
+AC_ARG_ENABLE(docs,
+AS_HELP_STRING([--enable-docs],[Enable documentation])
+AS_HELP_STRING([--disable-docs],[Disable documentation]),
+[ case "$enableval" in
+  no)
+       AC_MSG_RESULT(no)
+       BUILD_DOCS=0
+       dnl disable manual too because it needs built documentation
+       USE_MANUAL=0
+       curl_docs_msg="no"
+       ;;
+  *)   AC_MSG_RESULT(yes)
+       BUILD_DOCS=1
+       ;;
+  esac ],
+       AC_MSG_RESULT(yes)
+       BUILD_DOCS=1
+)
+
 
 dnl ************************************************************
 dnl disable C code generation support
@@ -1697,7 +1701,7 @@ int main(void)
 
 if test "$ipv6" = yes; then
   curl_ipv6_msg="enabled"
-  AC_DEFINE(ENABLE_IPV6, 1, [Define if you want to enable IPv6 support])
+  AC_DEFINE(USE_IPV6, 1, [Define if you want to enable IPv6 support])
   IPV6_ENABLED=1
   AC_SUBST(IPV6_ENABLED)
 
@@ -2494,10 +2498,6 @@ AC_SUBST([CURL_LT_SHLIB_VERSIONED_FLAVOUR],
   ["$versioned_symbols_flavour"])
 AM_CONDITIONAL([CURL_LT_SHLIB_USE_VERSIONED_SYMBOLS],
   [test "x$versioned_symbols" = 'xyes'])
-
-dnl Update .plist file with current version
-AC_SUBST([CURL_PLIST_VERSION],
-  ["$CURLVERSION"])
 
 dnl -------------------------------------------------
 dnl check winidn option before other IDN libraries
@@ -3483,10 +3483,10 @@ AS_HELP_STRING([--with-zsh-functions-dir=PATH],[Install zsh completions to PATH]
 AS_HELP_STRING([--without-zsh-functions-dir],[Do not install zsh completions]),
   [OPT_ZSH_FPATH=$withval])
 case "$OPT_ZSH_FPATH" in
-  no)
+  default|no)
     dnl --without-zsh-functions-dir option used
     ;;
-  default|yes)
+  yes)
     dnl --with-zsh-functions-dir option used without path
     ZSH_FUNCTIONS_DIR="$datarootdir/zsh/site-functions"
     AC_SUBST(ZSH_FUNCTIONS_DIR)
@@ -3497,6 +3497,7 @@ case "$OPT_ZSH_FPATH" in
     AC_SUBST(ZSH_FUNCTIONS_DIR)
     ;;
 esac
+AM_CONDITIONAL(USE_ZSH_COMPLETION, test x"$ZSH_FUNCTIONS_DIR" != x)
 
 dnl **********************************************************************
 dnl Check for fish completion path
@@ -3508,10 +3509,10 @@ AS_HELP_STRING([--with-fish-functions-dir=PATH],[Install fish completions to PAT
 AS_HELP_STRING([--without-fish-functions-dir],[Do not install fish completions]),
   [OPT_FISH_FPATH=$withval])
 case "$OPT_FISH_FPATH" in
-  no)
+  default|no)
     dnl --without-fish-functions-dir option used
     ;;
-  default|yes)
+  yes)
     dnl --with-fish-functions-dir option used without path
     CURL_CHECK_PKGCONFIG(fish)
     if test "$PKGCONFIG" != "no" ; then
@@ -3527,6 +3528,7 @@ case "$OPT_FISH_FPATH" in
     AC_SUBST(FISH_FUNCTIONS_DIR)
     ;;
 esac
+AM_CONDITIONAL(USE_FISH_COMPLETION, test x"$FISH_FUNCTIONS_DIR" != x)
 
 dnl Now check for the very most basic headers. Then we can use these
 dnl ones as default-headers when checking for the rest!
@@ -3824,10 +3826,6 @@ AC_CHECK_DECL([fseeko],
 
 CURL_CHECK_NONBLOCKING_SOCKET
 
-dnl ************************************************************
-dnl nroff tool stuff
-dnl
-
 AC_PATH_PROG( PERL, perl, ,
   $PATH:/usr/local/bin/perl:/usr/bin/:/usr/local/bin )
 AC_SUBST(PERL)
@@ -3841,40 +3839,6 @@ fi
 
 dnl set variable for use in automakefile(s)
 AM_CONDITIONAL(BUILD_DOCS, test x"$BUILD_DOCS" = x1)
-
-AC_PATH_PROGS( NROFF, gnroff nroff, ,
-  $PATH:/usr/bin/:/usr/local/bin )
-AC_SUBST(NROFF)
-
-if test -n "$NROFF"; then
-  dnl only check for nroff options if an nroff command was found
-
-  AC_MSG_CHECKING([how to use *nroff to get plain text from man pages])
-  MANOPT="-man"
-  mancheck=`echo foo | $NROFF $MANOPT 2>/dev/null`
-  if test -z "$mancheck"; then
-    MANOPT="-mandoc"
-   mancheck=`echo foo | $NROFF $MANOPT 2>/dev/null`
-    if test -z "$mancheck"; then
-      MANOPT=""
-      AC_MSG_RESULT([failed])
-      AC_MSG_WARN([found no *nroff option to get plaintext from man pages])
-    else
-      AC_MSG_RESULT([$MANOPT])
-    fi
-  else
-    AC_MSG_RESULT([$MANOPT])
-  fi
-  AC_SUBST(MANOPT)
-fi
-
-if test -z "$MANOPT"
-then
-  dnl if no nroff tool was found, or no option that could convert man pages
-  dnl was found, then disable the built-in manual stuff
-  AC_MSG_WARN([disabling built-in manual])
-  USE_MANUAL="no";
-fi
 
 dnl *************************************************************************
 dnl If the manual variable still is set, then we go with providing a built-in
@@ -4020,6 +3984,12 @@ if test "$want_thres" = "yes" && test "x$USE_THREADS_POSIX" != "x1"; then
     AC_MSG_ERROR([Threaded resolver enabled but no thread library found])
   fi
 fi
+
+AC_CHECK_HEADER(dirent.h,
+  [ AC_DEFINE(HAVE_DIRENT_H, 1, [if you have <dirent.h>])
+    AC_CHECK_FUNC(opendir, AC_DEFINE(HAVE_OPENDIR, 1, [if you have opendir]) )
+  ]
+)
 
 CURL_CONVERT_INCLUDE_TO_ISYSTEM
 
@@ -4211,10 +4181,6 @@ AS_HELP_STRING([--disable-ntlm],[Disable NTLM support]),
   esac ],
        AC_MSG_RESULT(yes)
 )
-
-CURL_CHECK_OPTION_NTLM_WB
-
-CURL_CHECK_NTLM_WB
 
 dnl ************************************************************
 dnl disable TLS-SRP authentication
@@ -4573,6 +4539,16 @@ if test "x$hsts" != "xyes"; then
   AC_DEFINE(CURL_DISABLE_HSTS, 1, [disable alt-svc])
 fi
 
+
+dnl *************************************************************
+dnl check whether HTTPSRR support if desired
+dnl
+if test "x$want_httpsrr" != "xno"; then
+  AC_MSG_RESULT([HTTPSRR support is available])
+  AC_DEFINE(USE_HTTPSRR, 1, [enable HTTPS RR support])
+  experimental="$experimental HTTPSRR"
+fi
+
 dnl *************************************************************
 dnl check whether ECH support, if desired, is actually available
 dnl
@@ -4583,18 +4559,28 @@ if test "x$want_ech" != "xno"; then
   ECH_ENABLED=0
   ECH_SUPPORT=''
 
-  dnl OpenSSL with a chosen ECH function should be enough
-  dnl so more exhaustive checking seems unnecessary for now
+  dnl check for OpenSSL
   if test "x$OPENSSL_ENABLED" = "x1"; then
-    AC_CHECK_FUNCS(SSL_get_ech_status,
-      ECH_SUPPORT="ECH support available (OpenSSL with SSL_get_ech_status)"
+    AC_CHECK_FUNCS(SSL_ech_set1_echconfig,
+      ECH_SUPPORT="ECH support available via OpenSSL with SSL_ech_set1_echconfig"
       ECH_ENABLED=1)
-
-  dnl add 'elif' chain here for additional implementations
+  fi
+  dnl check for boringssl equivalent
+  if test "x$OPENSSL_ENABLED" = "x1"; then
+    AC_CHECK_FUNCS(SSL_set1_ech_config_list,
+      ECH_SUPPORT="ECH support available via boringssl with SSL_set1_ech_config_list"
+      ECH_ENABLED=1)
+  fi
+  if test "x$WOLFSSL_ENABLED" = "x1"; then
+    AC_CHECK_FUNCS(wolfSSL_CTX_GenerateEchConfig,
+      ECH_SUPPORT="ECH support available via WolfSSL with wolfSSL_CTX_GenerateEchConfig"
+      ECH_ENABLED=1)
   fi
 
   dnl now deal with whatever we found
   if test "x$ECH_ENABLED" = "x1"; then
+    dnl force pre-requisites for ECH
+    AC_DEFINE(USE_HTTPSRR, 1, [force HTTPS RR support for ECH])
     AC_DEFINE(USE_ECH, 1, [if ECH support is available])
     AC_MSG_RESULT($ECH_SUPPORT)
     experimental="$experimental ECH"
@@ -4762,11 +4748,6 @@ if test "x$CURL_DISABLE_NTLM" != "x1"; then
   if test "x$use_curl_ntlm_core" = "xyes" \
       -o "x$USE_WINDOWS_SSPI" = "x1"; then
     SUPPORT_FEATURES="$SUPPORT_FEATURES NTLM"
-
-    if test "x$CURL_DISABLE_HTTP" != "x1" -a \
-        "x$NTLM_WB_ENABLED" = "x1"; then
-      SUPPORT_FEATURES="$SUPPORT_FEATURES NTLM_WB"
-    fi
   fi
 fi
 
@@ -4815,10 +4796,6 @@ if test "x$CURL_DISABLE_HTTP" != "x1"; then
   fi
 else
   AC_MSG_RESULT([no])
-fi
-
-if test "x$ECH_ENABLED" = "x1"; then
-  SUPPORT_FEATURES="$SUPPORT_FEATURES ECH"
 fi
 
 if test ${ac_cv_sizeof_curl_off_t} -gt 4; then
@@ -4984,7 +4961,6 @@ AC_CONFIG_FILES([Makefile \
            lib/Makefile \
            scripts/Makefile \
            lib/libcurl.vers \
-           lib/libcurl.plist \
            tests/Makefile \
            tests/config \
            tests/certs/Makefile \
