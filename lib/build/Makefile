@@ -4,7 +4,7 @@ L4DIR  ?= $(PKGDIR)/../..
 TARGET             = libcurl.a libcurl.so
 PC_FILENAME        = libcurl
 REQUIRES_LIBS      = libpthread libc_support_misc # gethostname() -> uname()
-REQUIRES_LIBS     += zlib
+REQUIRES_LIBS     += zlib zstd
 DEFINES            = -DHAVE_CONFIG_H=1 -DBUILDING_LIBCURL
 
 CONTRIB_INCDIR     = curl/contrib/include

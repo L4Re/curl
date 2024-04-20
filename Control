@@ -1,3 +1,3 @@
 provides: libcurl curl
-requires: stdlibs libpthread lwip zlib
+requires: stdlibs libpthread lwip zlib zstd
 maintainer: stephan.gerhold@kernkonzept.com

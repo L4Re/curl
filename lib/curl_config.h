@@ -422,7 +422,7 @@
 #define HAVE_LIBZ 1
 
 /* Define to 1 if you have the `zstd' library (-lzstd). */
-/* #undef HAVE_LIBZSTD */
+#define HAVE_LIBZSTD 1
 
 /* Define to 1 if you have the <linux/tcp.h> header file. */
 /* #define HAVE_LINUX_TCP_H 1 */
@@ -749,10 +749,10 @@
 /* #undef HAVE_X509_H */
 
 /* if libzstd is in use */
-/* #undef HAVE_ZSTD */
+#define HAVE_ZSTD 1
 
 /* Define to 1 if you have the <zstd.h> header file. */
-/* #undef HAVE_ZSTD_H */
+#define HAVE_ZSTD_H 1
 
 /* Define to 1 if you have the `_fseeki64' function. */
 /* #undef HAVE__FSEEKI64 */
@@ -815,7 +815,7 @@
 #define SIZEOF_LONG __SIZEOF_LONG__
 
 /* Size of long long in number of bytes */
-/* #undef SIZEOF_LONG_LONG */
+#define SIZEOF_LONG_LONG __SIZEOF_LONG_LONG__
 
 /* Size of off_t in number of bytes */
 #define SIZEOF_OFF_T 8
