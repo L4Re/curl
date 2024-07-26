@@ -64,11 +64,10 @@
 
 #define H3_STREAM_WINDOW_SIZE  (128 * 1024)
 #define H3_STREAM_CHUNK_SIZE    (16 * 1024)
-/* The pool keeps spares around and half of a full stream windows
- * seems good. More does not seem to improve performance.
- * The benefit of the pool is that stream buffer to not keep
- * spares. So memory consumption goes down when streams run empty,
- * have a large upload done, etc. */
+/* The pool keeps spares around and half of a full stream windows seems good.
+ * More does not seem to improve performance. The benefit of the pool is that
+ * stream buffer to not keep spares. Memory consumption goes down when streams
+ * run empty, have a large upload done, etc. */
 #define H3_STREAM_POOL_SPARES \
           (H3_STREAM_WINDOW_SIZE / H3_STREAM_CHUNK_SIZE ) / 2
 /* Receive and Send max number of chunks just follows from the
@@ -101,9 +100,9 @@ struct cf_quiche_ctx {
   struct bufc_pool stream_bufcp;     /* chunk pool for streams */
   struct Curl_hash streams;          /* hash `data->id` to `stream_ctx` */
   curl_off_t data_recvd;
-  curl_uint64_t max_idle_ms;         /* max idle time for QUIC conn */
   BIT(goaway);                       /* got GOAWAY from server */
   BIT(x509_store_setup);             /* if x509 store has been set up */
+  BIT(shutdown_started);             /* queued shutdown packets */
 };
 
 #ifdef DEBUG_QUICHE
@@ -137,6 +136,9 @@ static void cf_quiche_ctx_clear(struct cf_quiche_ctx *ctx)
     memset(ctx, 0, sizeof(*ctx));
   }
 }
+
+static CURLcode cf_flush_egress(struct Curl_cfilter *cf,
+                                struct Curl_easy *data);
 
 /**
  * All about the H3 internals of a stream
@@ -222,6 +224,7 @@ static void h3_data_done(struct Curl_cfilter *cf, struct Curl_easy *data)
 {
   struct cf_quiche_ctx *ctx = cf->ctx;
   struct stream_ctx *stream = H3_STREAM_CTX(ctx, data);
+  CURLcode result;
 
   (void)cf;
   if(stream) {
@@ -235,6 +238,9 @@ static void h3_data_done(struct Curl_cfilter *cf, struct Curl_easy *data)
         stream->send_closed = TRUE;
       }
       stream->closed = TRUE;
+      result = cf_flush_egress(cf, data);
+      if(result)
+        CURL_TRC_CF(data, cf, "data_done, flush egress -> %d", result);
     }
     Curl_hash_offt_remove(&ctx->streams, data->id);
   }
@@ -286,6 +292,21 @@ static struct Curl_easy *get_stream_easy(struct Curl_cfilter *cf,
   }
   *pstream = NULL;
   return NULL;
+}
+
+static void cf_quiche_expire_conn_closed(struct Curl_cfilter *cf,
+                                         struct Curl_easy *data)
+{
+  struct Curl_easy *sdata;
+
+  DEBUGASSERT(data->multi);
+  CURL_TRC_CF(data, cf, "conn closed, expire all transfers");
+  for(sdata = data->multi->easyp; sdata; sdata = sdata->next) {
+    if(sdata == data || sdata->conn != data->conn)
+      continue;
+    CURL_TRC_CF(sdata, cf, "conn closed, expire transfer");
+    Curl_expire(sdata, 0, EXPIRE_RUN_NOW);
+  }
 }
 
 /*
@@ -586,6 +607,14 @@ static CURLcode recv_pkt(const unsigned char *pkt, size_t pktlen,
                            &recv_info);
   if(nread < 0) {
     if(QUICHE_ERR_DONE == nread) {
+      if(quiche_conn_is_draining(ctx->qconn)) {
+        CURL_TRC_CF(r->data, r->cf, "ingress, connection is draining");
+        return CURLE_RECV_ERROR;
+      }
+      if(quiche_conn_is_closed(ctx->qconn)) {
+        CURL_TRC_CF(r->data, r->cf, "ingress, connection is closed");
+        return CURLE_RECV_ERROR;
+      }
       CURL_TRC_CF(r->data, r->cf, "ingress, quiche is DONE");
       return CURLE_OK;
     }
@@ -686,7 +715,13 @@ static CURLcode cf_flush_egress(struct Curl_cfilter *cf,
   if(!expiry_ns) {
     quiche_conn_on_timeout(ctx->qconn);
     if(quiche_conn_is_closed(ctx->qconn)) {
-      failf(data, "quiche_conn_on_timeout closed the connection");
+      if(quiche_conn_is_timed_out(ctx->qconn))
+        failf(data, "connection closed by idle timeout");
+      else
+        failf(data, "connection closed by server");
+      /* Connection timed out, expire all transfers belonging to it
+       * as will not get any more POLL events here. */
+      cf_quiche_expire_conn_closed(cf, data);
       return CURLE_SEND_ERROR;
     }
   }
@@ -1085,7 +1120,7 @@ out:
     nwritten = -1;
   }
   CURL_TRC_CF(data, cf, "[%" CURL_PRIu64 "] cf_send(len=%zu) -> %zd, %d",
-              stream? stream->id : -1, len, nwritten, *err);
+              stream? stream->id : (uint64_t)~0, len, nwritten, *err);
   return nwritten;
 }
 
@@ -1221,7 +1256,6 @@ static CURLcode cf_connect_start(struct Curl_cfilter *cf,
     debug_log_init = 1;
   }
 #endif
-  ctx->max_idle_ms = CURL_QUIC_MAX_IDLE_MS;
   Curl_bufcp_init(&ctx->stream_bufcp, H3_STREAM_CHUNK_SIZE,
                   H3_STREAM_POOL_SPARES);
   Curl_hash_offt_init(&ctx->streams, 63, h3_stream_hash_free);
@@ -1237,11 +1271,11 @@ static CURLcode cf_connect_start(struct Curl_cfilter *cf,
 
   ctx->cfg = quiche_config_new(QUICHE_PROTOCOL_VERSION);
   if(!ctx->cfg) {
-    failf(data, "can't create quiche config");
+    failf(data, "cannot create quiche config");
     return CURLE_FAILED_INIT;
   }
   quiche_config_enable_pacing(ctx->cfg, false);
-  quiche_config_set_max_idle_timeout(ctx->cfg, ctx->max_idle_ms * 1000);
+  quiche_config_set_max_idle_timeout(ctx->cfg, CURL_QUIC_MAX_IDLE_MS);
   quiche_config_set_initial_max_data(ctx->cfg, (1 * 1024 * 1024)
     /* (QUIC_MAX_STREAMS/2) * H3_STREAM_WINDOW_SIZE */);
   quiche_config_set_initial_max_streams_bidi(ctx->cfg, QUIC_MAX_STREAMS);
@@ -1288,7 +1322,7 @@ static CURLcode cf_connect_start(struct Curl_cfilter *cf,
                                       &sockaddr->sa_addr, sockaddr->addrlen,
                                       ctx->cfg, ctx->tls.ossl.ssl, false);
   if(!ctx->qconn) {
-    failf(data, "can't create quiche connection");
+    failf(data, "cannot create quiche connection");
     return CURLE_OUT_OF_MEMORY;
   }
 
@@ -1430,18 +1464,60 @@ out:
   return result;
 }
 
+static CURLcode cf_quiche_shutdown(struct Curl_cfilter *cf,
+                                   struct Curl_easy *data, bool *done)
+{
+  struct cf_quiche_ctx *ctx = cf->ctx;
+  CURLcode result = CURLE_OK;
+
+  if(cf->shutdown || !ctx || !ctx->qconn) {
+    *done = TRUE;
+    return CURLE_OK;
+  }
+
+  *done = FALSE;
+  if(!ctx->shutdown_started) {
+    int err;
+
+    ctx->shutdown_started = TRUE;
+    vquic_ctx_update_time(&ctx->q);
+    err = quiche_conn_close(ctx->qconn, TRUE, 0, NULL, 0);
+    if(err) {
+      CURL_TRC_CF(data, cf, "error %d adding shutdown packet, "
+                  "aborting shutdown", err);
+      result = CURLE_SEND_ERROR;
+      goto out;
+    }
+  }
+
+  if(!Curl_bufq_is_empty(&ctx->q.sendbuf)) {
+    CURL_TRC_CF(data, cf, "shutdown, flushing sendbuf");
+    result = cf_flush_egress(cf, data);
+    if(result)
+      goto out;
+  }
+
+  if(Curl_bufq_is_empty(&ctx->q.sendbuf)) {
+    /* sent everything, quiche does not seem to support a graceful
+     * shutdown waiting for a reply, so ware done. */
+    CURL_TRC_CF(data, cf, "shutdown completely sent off, done");
+    *done = TRUE;
+  }
+  else {
+    CURL_TRC_CF(data, cf, "shutdown sending blocked");
+  }
+
+out:
+  return result;
+}
+
 static void cf_quiche_close(struct Curl_cfilter *cf, struct Curl_easy *data)
 {
   struct cf_quiche_ctx *ctx = cf->ctx;
 
   if(ctx) {
-    if(ctx->qconn) {
-      vquic_ctx_update_time(&ctx->q);
-      (void)quiche_conn_close(ctx->qconn, TRUE, 0, NULL, 0);
-      /* flushing the egress is not a failsafe way to deliver all the
-         outstanding packets, but we also don't want to get stuck here... */
-      (void)cf_flush_egress(cf, data);
-    }
+    bool done;
+    (void)cf_quiche_shutdown(cf, data, &done);
     cf_quiche_ctx_clear(ctx);
   }
 }
@@ -1469,7 +1545,9 @@ static CURLcode cf_quiche_query(struct Curl_cfilter *cf,
       max_streams += quiche_conn_peer_streams_left_bidi(ctx->qconn);
     }
     *pres1 = (max_streams > INT_MAX)? INT_MAX : (int)max_streams;
-    CURL_TRC_CF(data, cf, "query: MAX_CONCURRENT -> %d", *pres1);
+    CURL_TRC_CF(data, cf, "query conn[%" CURL_FORMAT_CURL_OFF_T "]: "
+                "MAX_CONCURRENT -> %d (%zu in use)",
+                cf->conn->connection_id, *pres1, CONN_INUSE(cf->conn));
     return CURLE_OK;
   }
   case CF_QUERY_CONNECT_REPLY_MS:
@@ -1511,31 +1589,20 @@ static bool cf_quiche_conn_is_alive(struct Curl_cfilter *cf,
   if(!ctx->qconn)
     return FALSE;
 
-  /* Both sides of the QUIC connection announce they max idle times in
-   * the transport parameters. Look at the minimum of both and if
-   * we exceed this, regard the connection as dead. The other side
-   * may have completely purged it and will no longer respond
-   * to any packets from us. */
-  {
-    quiche_transport_params qpeerparams;
-    timediff_t idletime;
-    curl_uint64_t idle_ms = ctx->max_idle_ms;
-
-    if(quiche_conn_peer_transport_params(ctx->qconn, &qpeerparams) &&
-       qpeerparams.peer_max_idle_timeout &&
-       qpeerparams.peer_max_idle_timeout < idle_ms)
-      idle_ms = qpeerparams.peer_max_idle_timeout;
-    idletime = Curl_timediff(Curl_now(), cf->conn->lastused);
-    if(idletime > 0 && (curl_uint64_t)idletime > idle_ms)
-      return FALSE;
+  if(quiche_conn_is_closed(ctx->qconn)) {
+    if(quiche_conn_is_timed_out(ctx->qconn))
+      CURL_TRC_CF(data, cf, "connection was closed due to idle timeout");
+    else
+      CURL_TRC_CF(data, cf, "connection is closed");
+    return FALSE;
   }
 
   if(!cf->next || !cf->next->cft->is_alive(cf->next, data, input_pending))
     return FALSE;
 
   if(*input_pending) {
-    /* This happens before we've sent off a request and the connection is
-       not in use by any other transfer, there shouldn't be any data here,
+    /* This happens before we have sent off a request and the connection is
+       not in use by any other transfer, there should not be any data here,
        only "protocol frames" */
     *input_pending = FALSE;
     if(cf_process_ingress(cf, data))
@@ -1555,6 +1622,7 @@ struct Curl_cftype Curl_cft_http3 = {
   cf_quiche_destroy,
   cf_quiche_connect,
   cf_quiche_close,
+  cf_quiche_shutdown,
   Curl_cf_def_get_host,
   cf_quiche_adjust_pollset,
   cf_quiche_data_pending,
