@@ -12,7 +12,9 @@ PRIVATE_INCDIR     = $(SRC_DIR)/../lib $(SRC_DIR)/../lib/contrib/lib
 include $(PKGDIR)/lib/contrib/src/Makefile.inc
 SRC_C  = $(addprefix ../lib/contrib/src/, $(filter-out tool_hugehelp.c,$(CURL_CFILES)) \
 	                                  $(CURLX_CFILES))
-SRC_C += tool_hugehelp.c
+
+# if USE_MANUAL
+#SRC_C += tool_hugehelp.c
 
 include $(L4DIR)/mk/prog.mk
 
