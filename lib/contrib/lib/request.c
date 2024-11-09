@@ -52,7 +52,11 @@ CURLcode Curl_req_soft_reset(struct SingleRequest *req,
 
   req->done = FALSE;
   req->upload_done = FALSE;
+  req->upload_aborted = FALSE;
   req->download_done = FALSE;
+  req->eos_written = FALSE;
+  req->eos_read = FALSE;
+  req->eos_sent = FALSE;
   req->ignorebody = FALSE;
   req->shutdown = FALSE;
   req->bytecount = 0;
@@ -146,6 +150,7 @@ void Curl_req_hard_reset(struct SingleRequest *req, struct Curl_easy *data)
   req->download_done = FALSE;
   req->eos_written = FALSE;
   req->eos_read = FALSE;
+  req->eos_sent = FALSE;
   req->upload_done = FALSE;
   req->upload_aborted = FALSE;
   req->ignorebody = FALSE;
@@ -278,9 +283,9 @@ CURLcode Curl_req_set_upload_done(struct Curl_easy *data)
           data->req.writebytecount);
   else if(!data->req.download_done) {
     DEBUGASSERT(Curl_bufq_is_empty(&data->req.sendbuf));
-    infof(data, Curl_creader_total_length(data)?
-                "We are completely uploaded and fine" :
-                "Request completely sent off");
+    infof(data, Curl_creader_total_length(data) ?
+          "We are completely uploaded and fine" :
+          "Request completely sent off");
   }
 
   return Curl_xfer_send_close(data);
@@ -322,6 +327,13 @@ static CURLcode req_flush(struct Curl_easy *data)
     if(data->req.shutdown) {
       bool done;
       result = Curl_xfer_send_shutdown(data, &done);
+      if(result && data->req.shutdown_err_ignore) {
+        infof(data, "Shutdown send direction error: %d. Broken server? "
+              "Proceeding as if everything is ok.", result);
+        result = CURLE_OK;
+        done = TRUE;
+      }
+
       if(result)
         return result;
       if(!done)
