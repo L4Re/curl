@@ -41,9 +41,6 @@
 /* Define if you have the <io.h> header file.  */
 #define HAVE_IO_H 1
 
-/* Define if you need the malloc.h header file even with stdlib.h  */
-#define NEED_MALLOC_H 1
-
 /* Define if you have the <netdb.h> header file.  */
 /* #define HAVE_NETDB_H 1 */
 
@@ -117,14 +114,8 @@
 /* Define if you have the socket function.  */
 #define HAVE_SOCKET 1
 
-/* Define if you have the strcasecmp function.  */
-/* #define HAVE_STRCASECMP 1 */
-
 /* Define if you have the strdup function.  */
 /* #define HAVE_STRDUP 1 */
-
-/* Define if you have the stricmp function. */
-/* #define HAVE_STRICMP 1 */
 
 /* Define if you have the strtoll function.  */
 #if defined(__MINGW32__)

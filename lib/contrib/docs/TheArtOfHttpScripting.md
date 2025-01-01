@@ -161,7 +161,7 @@ SPDX-License-Identifier: curl
     curl https://curl.se
 
  you get a webpage returned in your terminal window. The entire HTML document
- that that URL holds.
+ this URL identifies.
 
  All HTTP replies contain a set of response headers that are normally hidden,
  use curl's [`--include`](https://curl.se/docs/manpage.html#-i) (`-i`)
@@ -455,6 +455,8 @@ SPDX-License-Identifier: curl
  same page that you see when getting the page with your browser. Then you know
  it is time to set the User Agent field to fool the server into thinking you
  are one of those browsers.
+
+ By default, curl uses curl/VERSION, such as User-Agent: curl/8.11.0.
 
  To make curl look like Internet Explorer 5 on a Windows 2000 box:
 

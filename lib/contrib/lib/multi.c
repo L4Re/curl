@@ -787,7 +787,7 @@ CURLMcode curl_multi_remove_handle(CURLM *m, CURL *d)
     return CURLM_BAD_HANDLE;
 
   /* Verify that we got a somewhat good easy handle too */
-  if(!GOOD_EASY_HANDLE(data) || !multi->num_easy)
+  if(!GOOD_EASY_HANDLE(data))
     return CURLM_BAD_EASY_HANDLE;
 
   /* Prevent users from trying to remove same easy handle more than once */
@@ -797,6 +797,11 @@ CURLMcode curl_multi_remove_handle(CURLM *m, CURL *d)
   /* Prevent users from trying to remove an easy handle from the wrong multi */
   if(data->multi != multi)
     return CURLM_BAD_EASY_HANDLE;
+
+  if(!multi->num_easy) {
+    DEBUGASSERT(0);
+    return CURLM_INTERNAL_ERROR;
+  }
 
   if(multi->in_callback)
     return CURLM_RECURSIVE_API_CALL;
@@ -1170,10 +1175,17 @@ CURLMcode curl_multi_fdset(CURLM *m,
       if(!FDSET_SOCK(data->last_poll.sockets[i]))
         /* pretend it does not exist */
         continue;
+#if defined(__DJGPP__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warith-conversion"
+#endif
       if(data->last_poll.actions[i] & CURL_POLL_IN)
         FD_SET(data->last_poll.sockets[i], read_fd_set);
       if(data->last_poll.actions[i] & CURL_POLL_OUT)
         FD_SET(data->last_poll.sockets[i], write_fd_set);
+#if defined(__DJGPP__)
+#pragma GCC diagnostic pop
+#endif
       if((int)data->last_poll.sockets[i] > this_max_fd)
         this_max_fd = (int)data->last_poll.sockets[i];
     }
@@ -1193,8 +1205,9 @@ CURLMcode curl_multi_waitfds(CURLM *m,
   CURLMcode result = CURLM_OK;
   struct Curl_llist_node *e;
   struct Curl_multi *multi = m;
+  unsigned int need = 0;
 
-  if(!ufds)
+  if(!ufds && (size || !fd_count))
     return CURLM_BAD_FUNCTION_ARGUMENT;
 
   if(!GOOD_MULTI_HANDLE(multi))
@@ -1207,20 +1220,17 @@ CURLMcode curl_multi_waitfds(CURLM *m,
   for(e = Curl_llist_head(&multi->process); e; e = Curl_node_next(e)) {
     struct Curl_easy *data = Curl_node_elem(e);
     multi_getsock(data, &data->last_poll);
-    if(Curl_waitfds_add_ps(&cwfds, &data->last_poll)) {
-      result = CURLM_OUT_OF_MEMORY;
-      goto out;
-    }
+    need += Curl_waitfds_add_ps(&cwfds, &data->last_poll);
   }
 
-  if(Curl_cpool_add_waitfds(&multi->cpool, &cwfds)) {
+  need += Curl_cpool_add_waitfds(&multi->cpool, &cwfds);
+
+  if(need != cwfds.n && ufds) {
     result = CURLM_OUT_OF_MEMORY;
-    goto out;
   }
 
-out:
   if(fd_count)
-    *fd_count = cwfds.n;
+    *fd_count = need;
   return result;
 }
 
@@ -1541,6 +1551,9 @@ CURLMcode curl_multi_wakeup(CURLM *m)
   if(multi->wakeup_pair[1] != CURL_SOCKET_BAD) {
 #ifdef USE_EVENTFD
     buf = &val;
+    /* eventfd has a stringent rule of requiring the 8-byte buffer when
+       calling write(2) on it, which makes the sizeof(buf) below fine since
+       this is only used on 64-bit systems and then the pointer is 64-bit */
 #else
     buf[0] = 1;
 #endif
@@ -3585,6 +3598,14 @@ static CURLMcode multi_socket(struct Curl_multi *multi,
         }
       }
     }
+  }
+  else {
+    /* Asked to run due to time-out. Clear the 'last_expire_ts' variable to
+       force Curl_update_timer() to trigger a callback to the app again even
+       if the same timeout is still the one to run after this call. That
+       handles the case when the application asks libcurl to run the timeout
+       prematurely. */
+    memset(&multi->last_expire_ts, 0, sizeof(multi->last_expire_ts));
   }
 
   result = multi_run_expired(&mrc);

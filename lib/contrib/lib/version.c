@@ -210,9 +210,6 @@ char *curl_version(void)
 #ifdef USE_LIBRTMP
   char rtmp_version[30];
 #endif
-#ifdef USE_HYPER
-  char hyper_buf[30];
-#endif
 #ifdef USE_GSASL
   char gsasl_buf[30];
 #endif
@@ -276,10 +273,6 @@ char *curl_version(void)
 #ifdef USE_LIBRTMP
   Curl_rtmp_version(rtmp_version, sizeof(rtmp_version));
   src[i++] = rtmp_version;
-#endif
-#ifdef USE_HYPER
-  msnprintf(hyper_buf, sizeof(hyper_buf), "Hyper/%s", hyper_version());
-  src[i++] = hyper_buf;
 #endif
 #ifdef USE_GSASL
   msnprintf(gsasl_buf, sizeof(gsasl_buf), "libgsasl/%s",
@@ -551,7 +544,7 @@ static const struct feat features_table[] = {
 #ifdef HAVE_ZSTD
   FEATURE("zstd",        NULL,                CURL_VERSION_ZSTD),
 #endif
-  {NULL,             NULL,                0}
+  {NULL,                 NULL,                0}
 };
 
 static const char *feature_names[sizeof(features_table) /
@@ -673,14 +666,6 @@ curl_version_info_data *curl_version_info(CURLversion stamp)
     static char quicbuffer[80];
     Curl_quic_ver(quicbuffer, sizeof(quicbuffer));
     version_info.quic_version = quicbuffer;
-  }
-#endif
-
-#ifdef USE_HYPER
-  {
-    static char hyper_buffer[30];
-    msnprintf(hyper_buffer, sizeof(hyper_buffer), "Hyper/%s", hyper_version());
-    version_info.hyper_version = hyper_buffer;
   }
 #endif
 

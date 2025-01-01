@@ -28,9 +28,9 @@ CMAKE_DIST = CMakeLists.txt curl_config.h.cmake
 CHECKSRC_DIST = .checksrc vauth/.checksrc vquic/.checksrc vssh/.checksrc \
  vtls/.checksrc
 
-EXTRA_DIST = Makefile.mk config-win32.h config-win32ce.h config-plan9.h \
- config-riscos.h config-mac.h curl_config.h.in config-dos.h libcurl.rc  \
- config-amigaos.h config-win32ce.h config-os400.h setup-os400.h         \
+EXTRA_DIST = config-win32.h config-win32ce.h config-plan9.h             \
+ config-riscos.h config-mac.h curl_config.h.in libcurl.rc               \
+ config-win32ce.h config-os400.h setup-os400.h                          \
  $(CMAKE_DIST) setup-win32.h Makefile.soname optiontable.pl libcurl.def \
  $(CHECKSRC_DIST)
 
@@ -155,12 +155,15 @@ all-local: checksrc
 endif
 
 # disable the tests that are mostly causing false positives
-TIDYFLAGS=-checks=-clang-analyzer-security.insecureAPI.strcpy,-clang-analyzer-optin.performance.Padding,-clang-analyzer-valist.Uninitialized,-clang-analyzer-core.NonNullParamChecker,-clang-analyzer-core.NullDereference -quiet
+TIDYFLAGS := -checks=-clang-analyzer-security.insecureAPI.strcpy,-clang-analyzer-optin.performance.Padding,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling -quiet
+if CURL_WERROR
+TIDYFLAGS += --warnings-as-errors=*
+endif
 
-TIDY:=clang-tidy
+TIDY := clang-tidy
 
 tidy:
-	$(TIDY) $(CSOURCES) $(TIDYFLAGS) -- $(AM_CPPFLAGS) $(CPPFLAGS) -DHAVE_CONFIG_H
+	$(TIDY) $(CSOURCES) $(TIDYFLAGS) $(CURL_CLANG_TIDYFLAGS) -- $(AM_CPPFLAGS) $(CPPFLAGS) -DHAVE_CONFIG_H
 
 optiontable:
 	perl optiontable.pl < $(top_srcdir)/include/curl/curl.h > easyoptions.c

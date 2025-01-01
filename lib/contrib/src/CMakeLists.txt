@@ -50,7 +50,7 @@ else()
 endif()
 
 # Get 'CURL_CFILES', 'CURLX_CFILES', 'CURL_HFILES', 'CURLTOOL_LIBCURL_CFILES' variables
-transform_makefile_inc("Makefile.inc" "${CMAKE_CURRENT_BINARY_DIR}/Makefile.inc.cmake")
+curl_transform_makefile_inc("Makefile.inc" "${CMAKE_CURRENT_BINARY_DIR}/Makefile.inc.cmake")
 include("${CMAKE_CURRENT_BINARY_DIR}/Makefile.inc.cmake")
 
 if(CURL_CA_EMBED_SET)
@@ -104,9 +104,7 @@ target_compile_definitions(curltool PUBLIC "UNITTESTS" "CURL_STATICLIB")
 target_link_libraries(curltool PRIVATE ${CURL_LIBS})
 
 if(CURL_HAS_LTO)
-  set_target_properties(${EXE_NAME} PROPERTIES
-    INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
-    INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  set_target_properties(${EXE_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
 if(ENABLE_UNICODE AND MINGW)

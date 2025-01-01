@@ -130,6 +130,7 @@ struct OperationConfig {
   struct getout *url_get;   /* point to the node to fill in URL */
   struct getout *url_out;   /* point to the node to fill in outfile */
   struct getout *url_ul;    /* point to the node to fill in upload */
+  size_t num_urls;          /* number of URLs added to the list */
 #ifndef CURL_DISABLE_IPFS
   char *ipfs_gateway;
 #endif /* !CURL_DISABLE_IPFS */
@@ -337,7 +338,7 @@ struct GlobalConfig {
   unsigned short parallel_max; /* MAX_PARALLEL is the maximum */
   bool parallel_connect;
   char *help_category;            /* The help category, if set */
-  struct var *variables;
+  struct tool_var *variables;
   struct OperationConfig *first;
   struct OperationConfig *current;
   struct OperationConfig *last;   /* Always last in the struct */

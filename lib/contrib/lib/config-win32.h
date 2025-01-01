@@ -44,9 +44,6 @@
 /* Define if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
 
-/* Define if you need <malloc.h> header even with <stdlib.h> header file. */
-#define NEED_MALLOC_H 1
-
 /* Define if you have the <netdb.h> header file. */
 /* #define HAVE_NETDB_H 1 */
 
@@ -161,16 +158,8 @@
 /* Define if you have the socket function. */
 #define HAVE_SOCKET 1
 
-/* Define if you have the strcasecmp function. */
-#if defined(__MINGW32__)
-#define HAVE_STRCASECMP 1
-#endif
-
 /* Define if you have the strdup function. */
 #define HAVE_STRDUP 1
-
-/* Define if you have the stricmp function. */
-#define HAVE_STRICMP 1
 
 /* Define if you have the strtoll function. */
 #if (defined(_MSC_VER) && (_MSC_VER >= 1800)) || defined(__MINGW32__)
@@ -425,10 +414,6 @@ Vista
 #  ifndef _FILE_OFFSET_BITS
 #  define _FILE_OFFSET_BITS 64
 #  endif
-#endif
-
-#ifdef USE_WIN32_LARGE_FILES
-#define HAVE__FSEEKI64
 #endif
 
 /* Define to the size of `off_t', as computed by sizeof. */

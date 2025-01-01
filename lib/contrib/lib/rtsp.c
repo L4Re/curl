@@ -24,7 +24,7 @@
 
 #include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_RTSP) && !defined(USE_HYPER)
+#if !defined(CURL_DISABLE_RTSP)
 
 #include "urldata.h"
 #include <curl/curl.h>
@@ -212,6 +212,11 @@ static CURLcode rtsp_done(struct Curl_easy *data,
     if(data->set.rtspreq == RTSPREQ_RECEIVE &&
        (data->conn->proto.rtspc.rtp_channel == -1)) {
       infof(data, "Got an RTP Receive with a CSeq of %ld", CSeq_recv);
+    }
+    if(data->set.rtspreq == RTSPREQ_RECEIVE &&
+       data->req.eos_written) {
+      failf(data, "Server prematurely closed the RTSP connection.");
+      return CURLE_RECV_ERROR;
     }
   }
 
@@ -1038,4 +1043,4 @@ CURLcode rtsp_parse_transport(struct Curl_easy *data, const char *transport)
 }
 
 
-#endif /* CURL_DISABLE_RTSP or using Hyper */
+#endif /* CURL_DISABLE_RTSP */

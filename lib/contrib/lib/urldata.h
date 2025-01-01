@@ -105,7 +105,7 @@ typedef unsigned int curl_prot_t;
 #define CURL_DEFAULT_USER "anonymous"
 #define CURL_DEFAULT_PASSWORD "ftp@example.com"
 
-#if !defined(_WIN32) && !defined(MSDOS) && !defined(__EMX__)
+#if !defined(_WIN32) && !defined(MSDOS)
 /* do FTP line-end CRLF => LF conversions on platforms that prefer LF-only. It
    also means: keep CRLF line endings on the CRLF platforms */
 #define CURL_PREFER_LF_LINEENDS
@@ -180,13 +180,6 @@ typedef ssize_t (Curl_recv)(struct Curl_easy *data,   /* transfer */
                             size_t len,               /* max amount to read */
                             CURLcode *err);           /* error to return */
 
-#ifdef USE_HYPER
-typedef CURLcode (*Curl_datastream)(struct Curl_easy *data,
-                                    struct connectdata *conn,
-                                    int *didwhat,
-                                    int select_res);
-#endif
-
 #include "mime.h"
 #include "imap.h"
 #include "pop3.h"
@@ -200,7 +193,6 @@ typedef CURLcode (*Curl_datastream)(struct Curl_easy *data,
 #include "mqtt.h"
 #include "ftplistparser.h"
 #include "multihandle.h"
-#include "c-hyper.h"
 #include "cf-socket.h"
 
 #ifdef HAVE_GSSAPI
@@ -271,21 +263,7 @@ enum protection_level {
 
 /* SSL backend-specific data; declared differently by each SSL backend */
 struct ssl_backend_data;
-
-typedef enum {
-  CURL_SSL_PEER_DNS,
-  CURL_SSL_PEER_IPV4,
-  CURL_SSL_PEER_IPV6
-} ssl_peer_type;
-
-struct ssl_peer {
-  char *hostname;        /* hostname for verification */
-  char *dispname;        /* display version of hostname */
-  char *sni;             /* SNI version of hostname or NULL if not usable */
-  ssl_peer_type type;    /* type of the peer information */
-  int port;              /* port we are talking to */
-  int transport;         /* one of TRNSPRT_* defines */
-};
+struct Curl_ssl_scache_entry;
 
 struct ssl_primary_config {
   char *CApath;          /* certificate dir (does not work on Windows) */
@@ -339,24 +317,6 @@ struct ssl_config_data {
 struct ssl_general_config {
   size_t max_ssl_sessions; /* SSL session id cache size */
   int ca_cache_timeout;  /* Certificate store cache timeout (seconds) */
-};
-
-typedef void Curl_ssl_sessionid_dtor(void *sessionid, size_t idsize);
-
-/* information stored about one single SSL session */
-struct Curl_ssl_session {
-  char *name;       /* hostname for which this ID was used */
-  char *conn_to_host; /* hostname for the connection (may be NULL) */
-  const char *scheme; /* protocol scheme used */
-  char *alpn;         /* APLN TLS negotiated protocol string */
-  void *sessionid;  /* as returned from the SSL layer */
-  size_t idsize;    /* if known, otherwise 0 */
-  Curl_ssl_sessionid_dtor *sessionid_free; /* free `sessionid` callback */
-  long age;         /* just a number, the higher the more recent */
-  int remote_port;  /* remote port */
-  int conn_to_port; /* remote port for the connection (may be -1) */
-  int transport;    /* TCP or QUIC */
-  struct ssl_primary_config ssl_config; /* setup for this session */
 };
 
 #ifdef USE_WINDOWS_SSPI
@@ -962,10 +922,7 @@ struct connectdata {
 #ifdef USE_UNIX_SOCKETS
   char *unix_domain_socket;
 #endif
-#ifdef USE_HYPER
-  /* if set, an alternative data transfer function */
-  Curl_datastream datastream;
-#endif
+
   /* When this connection is created, store the conditions for the local end
      bind. This is stored before the actual bind and before any connection is
      made and will serve the purpose of being used for comparison reasons so
@@ -1026,6 +983,8 @@ struct PureInfo {
   curl_off_t request_size; /* the amount of bytes sent in the request(s) */
   unsigned long proxyauthavail; /* what proxy auth types were announced */
   unsigned long httpauthavail;  /* what host auth types were announced */
+  unsigned long proxyauthpicked; /* selected proxy auth type */
+  unsigned long httpauthpicked;  /* selected host auth type */
   long numconnects; /* how many new connection did libcurl created */
   char *contenttype; /* the content type of the object */
   char *wouldredirect; /* URL this would have been redirected to if asked to */
@@ -1090,6 +1049,7 @@ struct Progress {
   struct curltime start;
   struct curltime t_startsingle;
   struct curltime t_startop;
+  struct curltime t_startqueue;
   struct curltime t_acceptdata;
 
 #define CURR_TIME (5 + 1) /* 6 entries for 5 seconds */
@@ -1232,8 +1192,7 @@ struct UrlState {
   curl_prot_t first_remote_protocol;
 
   int retrycount; /* number of retries on a new connection */
-  struct Curl_ssl_session *session; /* array of 'max_ssl_sessions' size */
-  long sessionage;                  /* number of the most recent session */
+  struct Curl_ssl_scache *ssl_scache; /* TLS session pool */
   int os_errno;  /* filled in with errno whenever an error occurs */
   long followlocation; /* redirect counter */
   int requests; /* request counter: redirects + authentication retakes */
@@ -1254,6 +1213,10 @@ struct UrlState {
 #if defined(USE_OPENSSL)
   /* void instead of ENGINE to avoid bleeding OpenSSL into this header */
   void *engine;
+  /* this is just a flag -- we do not need to reference the provider in any
+   * way as OpenSSL takes care of that */
+  BIT(provider);
+  BIT(provider_failed);
 #endif /* USE_OPENSSL */
   struct curltime expiretime; /* set this with Curl_expire() only */
   struct Curl_tree timenode; /* for the splay stuff */
@@ -1308,10 +1271,6 @@ struct UrlState {
 #ifndef CURL_DISABLE_COOKIES
   struct curl_slist *cookielist; /* list of cookie files set by
                                     curl_easy_setopt(COOKIEFILE) calls */
-#endif
-#ifdef USE_HYPER
-  bool hconnect;  /* set if a CONNECT request */
-  CURLcode hresult; /* used to pass return codes back from hyper callbacks */
 #endif
 
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
@@ -1956,9 +1915,6 @@ struct Curl_easy {
   struct PureInfo info;        /* stats, reports and info data */
   struct curl_tlssessioninfo tsi; /* Information about the TLS session, only
                                      valid after a client has asked for it */
-#ifdef USE_HYPER
-  struct hyptransfer hyp;
-#endif
 };
 
 #define LIBCURL_NAME "libcurl"

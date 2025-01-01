@@ -72,6 +72,7 @@
 #include "url.h"
 #include "getinfo.h"
 #include "vtls/vtls.h"
+#include "vtls/vtls_scache.h"
 #include "vquic/vquic.h"
 #include "select.h"
 #include "multiif.h"
@@ -434,15 +435,6 @@ CURLcode Curl_sendrecv(struct Curl_easy *data, struct curltime *nowp)
     data->state.select_bits = 0;
   }
 
-#ifdef USE_HYPER
-  if(data->conn->datastream) {
-    result = data->conn->datastream(data, data->conn, &didwhat,
-                                    CURL_CSELECT_OUT|CURL_CSELECT_IN);
-    if(result || data->req.done)
-      goto out;
-  }
-  else {
-#endif
   /* We go ahead and do a read if we have a readable socket or if the stream
      was rewound (in which case we have data in a buffer) */
   if(k->keepon & KEEP_RECV) {
@@ -457,9 +449,6 @@ CURLcode Curl_sendrecv(struct Curl_easy *data, struct curltime *nowp)
     if(result)
       goto out;
   }
-#ifdef USE_HYPER
-  }
-#endif
 
   if(!didwhat) {
     /* Transfer wanted to send/recv, but nothing was possible. */
@@ -538,7 +527,7 @@ void Curl_init_CONNECT(struct Curl_easy *data)
  */
 CURLcode Curl_pretransfer(struct Curl_easy *data)
 {
-  CURLcode result;
+  CURLcode result = CURLE_OK;
 
   if(!data->state.url && !data->set.uh) {
     /* we cannot do anything without URL */
@@ -577,12 +566,14 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
   data->state.httpreq = data->set.method;
   data->state.url = data->set.str[STRING_SET_URL];
 
-  /* Init the SSL session ID cache here. We do it here since we want to do it
-     after the *_setopt() calls (that could specify the size of the cache) but
-     before any transfer takes place. */
-  result = Curl_ssl_initsessions(data, data->set.general_ssl.max_ssl_sessions);
-  if(result)
-    return result;
+#ifdef USE_SSL
+  if(!data->state.ssl_scache) {
+    result = Curl_ssl_scache_create(data->set.general_ssl.max_ssl_sessions,
+                                    2, &data->state.ssl_scache);
+    if(result)
+      return result;
+  }
+#endif
 
   data->state.requests = 0;
   data->state.followlocation = 0; /* reset the location-follow counter */

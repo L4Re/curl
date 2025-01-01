@@ -2079,10 +2079,19 @@ static CURLcode ftp_state_mdtm_resp(struct Curl_easy *data,
       /* If we asked for a time of the file and we actually got one as well,
          we "emulate" an HTTP-style header in our output. */
 
+#if defined(__GNUC__) && (defined(__DJGPP__) || defined(__AMIGA__))
+#pragma GCC diagnostic push
+/* 'time_t' is unsigned in MSDOS and AmigaOS. Silence:
+   warning: comparison of unsigned expression in '>= 0' is always true */
+#pragma GCC diagnostic ignored "-Wtype-limits"
+#endif
       if(data->req.no_body &&
          ftpc->file &&
          data->set.get_filetime &&
          (data->info.filetime >= 0) ) {
+#if defined(__GNUC__) && (defined(__DJGPP__) || defined(__AMIGA__))
+#pragma GCC diagnostic pop
+#endif
         char headerbuf[128];
         int headerbuflen;
         time_t filetime = data->info.filetime;
@@ -4244,7 +4253,7 @@ CURLcode ftp_parse_url_path(struct Curl_easy *data)
       else
         n -= ftpc->file ? strlen(ftpc->file) : 0;
 
-      if((strlen(oldPath) == n) && !strncmp(rawPath, oldPath, n)) {
+      if((strlen(oldPath) == n) && rawPath && !strncmp(rawPath, oldPath, n)) {
         infof(data, "Request has same path as previous transfer");
         ftpc->cwddone = TRUE;
       }

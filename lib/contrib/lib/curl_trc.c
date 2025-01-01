@@ -319,7 +319,7 @@ static struct trc_cft_def trc_cfts[] = {
 #ifdef USE_HTTP3
   { &Curl_cft_http3,          TRC_CT_PROTOCOL },
 #endif
-#if !defined(CURL_DISABLE_HTTP) && !defined(USE_HYPER)
+#if !defined(CURL_DISABLE_HTTP)
   { &Curl_cft_http_connect,   TRC_CT_PROTOCOL },
 #endif
 };
@@ -365,7 +365,7 @@ static CURLcode trc_opt(const char *config)
   if(!tmp)
     return CURLE_OUT_OF_MEMORY;
 
-  token = strtok_r(tmp, ", ", &tok_buf);
+  token = Curl_strtok_r(tmp, ", ", &tok_buf);
   while(token) {
     switch(*token) {
       case '-':
@@ -391,7 +391,7 @@ static CURLcode trc_opt(const char *config)
     else
       trc_apply_level_by_name(token, lvl);
 
-    token = strtok_r(NULL, ", ", &tok_buf);
+    token = Curl_strtok_r(NULL, ", ", &tok_buf);
   }
   free(tmp);
   return CURLE_OK;

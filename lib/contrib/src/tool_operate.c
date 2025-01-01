@@ -111,12 +111,6 @@ extern const unsigned char curl_ca_embed[];
 #endif
 #endif
 
-#ifndef O_BINARY
-/* since O_BINARY as used in bitmasks, setting it to zero makes it usable in
-   source code but yet it does not ruin anything */
-#  define O_BINARY 0
-#endif
-
 #ifndef SOL_IP
 #  define SOL_IP IPPROTO_IP
 #endif
@@ -145,7 +139,6 @@ static bool is_fatal_error(CURLcode code)
   case CURLE_FAILED_INIT:
   case CURLE_OUT_OF_MEMORY:
   case CURLE_UNKNOWN_OPTION:
-  case CURLE_FUNCTION_NOT_FOUND:
   case CURLE_BAD_FUNCTION_ARGUMENT:
     /* critical error */
     return TRUE;
@@ -380,16 +373,16 @@ static CURLcode pre_transfer(struct GlobalConfig *global,
       case FAB$C_VAR:
       case FAB$C_VFC:
       case FAB$C_STMCR:
-        per->infd = open(per->uploadfile, O_RDONLY | O_BINARY);
+        per->infd = open(per->uploadfile, O_RDONLY | CURL_O_BINARY);
         break;
       default:
-        per->infd = open(per->uploadfile, O_RDONLY | O_BINARY,
+        per->infd = open(per->uploadfile, O_RDONLY | CURL_O_BINARY,
                          "rfm=stmlf", "ctx=stm");
       }
     }
     if(per->infd == -1)
 #else
-      per->infd = open(per->uploadfile, O_RDONLY | O_BINARY);
+      per->infd = open(per->uploadfile, O_RDONLY | CURL_O_BINARY);
     if((per->infd == -1) || fstat(per->infd, &fileinfo))
 #endif
     {
@@ -677,7 +670,7 @@ static CURLcode post_per_transfer(struct GlobalConfig *global,
               outs->bytes);
         fflush(outs->stream);
         /* truncate file at the position where we started appending */
-#ifdef HAVE_FTRUNCATE
+#if defined(HAVE_FTRUNCATE) && !defined(__DJGPP__) && !defined(__AMIGA__)
         if(ftruncate(fileno(outs->stream), outs->init)) {
           /* when truncate fails, we cannot just append as then we will
              create something strange, bail out */
@@ -1941,12 +1934,9 @@ static CURLcode single_transfer(struct GlobalConfig *global,
 
         /* open file for reading: */
         FILE *file = fopen(config->etag_compare_file, FOPEN_READTEXT);
-        if(!file && !config->etag_save_file) {
-          errorf(global,
-                 "Failed to open %s", config->etag_compare_file);
-          result = CURLE_READ_ERROR;
-          break;
-        }
+        if(!file)
+          warnf(global, "Failed to open %s: %s", config->etag_compare_file,
+                strerror(errno));
 
         if((PARAM_OK == file2string(&etag_from_file, file)) &&
            etag_from_file) {
@@ -1978,6 +1968,12 @@ static CURLcode single_transfer(struct GlobalConfig *global,
       }
 
       if(config->etag_save_file) {
+        if(config->create_dirs) {
+          result = create_dir_hierarchy(config->etag_save_file, global);
+          if(result)
+            break;
+        }
+
         /* open file for output: */
         if(strcmp(config->etag_save_file, "-")) {
           FILE *newfile = fopen(config->etag_save_file, "ab");
@@ -1997,7 +1993,7 @@ static CURLcode single_transfer(struct GlobalConfig *global,
         }
         else {
           /* always use binary mode for protocol header output */
-          set_binmode(etag_save->stream);
+          CURL_SET_BINMODE(etag_save->stream);
         }
       }
 
@@ -2042,7 +2038,7 @@ static CURLcode single_transfer(struct GlobalConfig *global,
         if(!strcmp(config->headerfile, "%")) {
           heads->stream = stderr;
           /* use binary mode for protocol header output */
-          set_binmode(heads->stream);
+          CURL_SET_BINMODE(heads->stream);
         }
         else if(strcmp(config->headerfile, "-")) {
           FILE *newfile;
@@ -2083,7 +2079,7 @@ static CURLcode single_transfer(struct GlobalConfig *global,
         }
         else {
           /* always use binary mode for protocol header output */
-          set_binmode(heads->stream);
+          CURL_SET_BINMODE(heads->stream);
         }
       }
 
@@ -2270,7 +2266,7 @@ static CURLcode single_transfer(struct GlobalConfig *global,
         DEBUGASSERT(per->infdopen == FALSE);
         DEBUGASSERT(per->infd == STDIN_FILENO);
 
-        set_binmode(stdin);
+        CURL_SET_BINMODE(stdin);
         if(!strcmp(per->uploadfile, ".")) {
           if(curlx_nonblock((curl_socket_t)per->infd, TRUE) < 0)
             warnf(global,
@@ -2304,7 +2300,7 @@ static CURLcode single_transfer(struct GlobalConfig *global,
          !config->use_ascii) {
         /* We get the output to stdout and we have not got the ASCII/text
            flag, then set stdout to be binary */
-        set_binmode(stdout);
+        CURL_SET_BINMODE(stdout);
       }
 
       /* explicitly passed to stdout means okaying binary gunk */

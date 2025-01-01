@@ -1,3 +1,4 @@
+#!/usr/bin/env perl
 #***************************************************************************
 #                                  _   _ ____  _
 #  Project                     ___| | | |  _ \| |
@@ -20,33 +21,41 @@
 #
 # SPDX-License-Identifier: curl
 #
-#***************************************************************************
+###########################################################################
 
-# Build libcurl via lib/Makefile.mk first.
+my $varname = "var";
+if($ARGV[0] eq "--var") {
+    shift;
+    $varname = shift @ARGV;
+}
 
-PROOT := ../..
+my $varname_upper = uc($varname);
 
-### Common
+print <<HEAD
+/*
+ * NEVER EVER edit this manually, fix the mk-file-embed.pl script instead!
+ */
+#ifndef CURL_DECLARED_${varname_upper}
+#define CURL_DECLARED_${varname_upper}
+extern const unsigned char ${varname}[];
+#endif
+const unsigned char ${varname}[] = {
+HEAD
+    ;
 
-include $(PROOT)/lib/Makefile.mk
+while (<STDIN>) {
+    my $line = $_;
+    foreach my $n (split //, $line) {
+        my $ord = ord($n);
+        printf("%s,", $ord);
+        if($ord == 10) {
+             printf("\n");
+        }
+    }
+}
 
-### Local
-
-CPPFLAGS += -DCURL_NO_OLDIES
-LDFLAGS  += -L$(PROOT)/lib
-LIBS     := -lcurl $(LIBS)
-
-### Sources and targets
-
-# Provides check_PROGRAMS
-include Makefile.inc
-
-TARGETS := $(patsubst %,%$(BIN_EXT),$(strip $(check_PROGRAMS)))
-TOCLEAN := $(TARGETS)
-
-### Rules
-
-%$(BIN_EXT): %.c $(PROOT)/lib/libcurl.a
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $< -o $@ $(LIBS)
-
-all: $(TARGETS)
+print <<ENDLINE
+0
+};
+ENDLINE
+    ;
