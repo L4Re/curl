@@ -58,7 +58,6 @@
 #include <dirent.h>
 #endif
 
-#include "strtoofft.h"
 #include "urldata.h"
 #include <curl/curl.h>
 #include "progress.h"
@@ -120,6 +119,7 @@ const struct Curl_handler Curl_handler_file = {
   ZERO_NULL,                            /* write_resp_hd */
   ZERO_NULL,                            /* connection_check */
   ZERO_NULL,                            /* attach connection */
+  ZERO_NULL,                            /* follow */
   0,                                    /* defport */
   CURLPROTO_FILE,                       /* protocol */
   CURLPROTO_FILE,                       /* family */
@@ -203,7 +203,7 @@ static CURLcode file_connect(struct Curl_easy *data, bool *done)
       return CURLE_URL_MALFORMAT;
     }
 
-  fd = open(actual_path, O_RDONLY|O_BINARY);
+  fd = open(actual_path, O_RDONLY|CURL_O_BINARY);
   file->path = actual_path;
 #else
   if(memchr(real_path, 0, real_path_len)) {
@@ -240,7 +240,7 @@ static CURLcode file_connect(struct Curl_easy *data, bool *done)
   file->path = real_path;
   #endif
 #endif
-  Curl_safefree(file->freepath);
+  free(file->freepath);
   file->freepath = real_path; /* free this when done */
 
   file->fd = fd;
@@ -312,16 +312,11 @@ static CURLcode file_upload(struct Curl_easy *data)
   if(!dir[1])
     return CURLE_FILE_COULDNT_READ_FILE; /* fix: better error code */
 
-#ifdef O_BINARY
-#define MODE_DEFAULT O_WRONLY|O_CREAT|O_BINARY
-#else
-#define MODE_DEFAULT O_WRONLY|O_CREAT
-#endif
-
+  mode = O_WRONLY|O_CREAT|CURL_O_BINARY;
   if(data->state.resume_from)
-    mode = MODE_DEFAULT|O_APPEND;
+    mode |= O_APPEND;
   else
-    mode = MODE_DEFAULT|O_TRUNC;
+    mode |= O_TRUNC;
 
 #if (defined(ANDROID) || defined(__ANDROID__)) && \
     (defined(__i386__) || defined(__arm__))
@@ -552,7 +547,7 @@ static CURLcode file_do(struct Curl_easy *data, bool *done)
 
   if(data->state.resume_from) {
     if(!S_ISDIR(statbuf.st_mode)) {
-#ifdef __AMIGA__
+#if defined(__AMIGA__) || defined(__MINGW32CE__)
       if(data->state.resume_from !=
           lseek(fd, (off_t)data->state.resume_from, SEEK_SET))
 #else

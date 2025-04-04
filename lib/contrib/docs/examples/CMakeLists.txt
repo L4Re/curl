@@ -22,42 +22,22 @@
 #
 ###########################################################################
 
-all:
-	./configure
-	make
+add_custom_target(curl-examples)
 
-ssl:
-	./configure --with-openssl
-	make
+# Get 'check_PROGRAMS' variable
+curl_transform_makefile_inc("Makefile.inc" "${CMAKE_CURRENT_BINARY_DIR}/Makefile.inc.cmake")
+include("${CMAKE_CURRENT_BINARY_DIR}/Makefile.inc.cmake")
 
-vc:
-	cd winbuild
-	nmake /f Makefile.vc MACHINE=x86
-
-vc-x64:
-	cd winbuild
-	nmake /f Makefile.vc MACHINE=x64
-
-cygwin:
-	./configure
-	make
-
-cygwin-ssl:
-	./configure --with-openssl
-	make
-
-unix: all
-
-unix-ssl: ssl
-
-linux: all
-
-linux-ssl: ssl
-
-ca-bundle: scripts/mk-ca-bundle.pl
-	@echo "generate a fresh ca-bundle.crt"
-	@perl $< -b -l -u lib/ca-bundle.crt
-
-ca-firefox: scripts/firefox-db2pem.sh
-	@echo "generate a fresh ca-bundle.crt"
-	./scripts/firefox-db2pem.sh lib/ca-bundle.crt
+foreach(_target IN LISTS check_PROGRAMS)
+  set(_target_name "curl-example-${_target}")
+  add_executable(${_target_name} EXCLUDE_FROM_ALL "${_target}.c")
+  add_dependencies(curl-examples ${_target_name})
+  target_link_libraries(${_target_name} ${LIB_SELECTED} ${CURL_LIBS})
+  target_compile_definitions(${_target_name} PRIVATE "CURL_NO_OLDIES" "$<$<BOOL:MSVC>:_CRT_SECURE_NO_DEPRECATE>")
+  if(LIB_SELECTED STREQUAL LIB_STATIC AND WIN32)
+    set_property(TARGET ${_target_name} APPEND PROPERTY COMPILE_DEFINITIONS "CURL_STATICLIB")
+  endif()
+  set_target_properties(${_target_name} PROPERTIES
+    OUTPUT_NAME "${_target}" UNITY_BUILD OFF
+    PROJECT_LABEL "Example ${_target}")
+endforeach()

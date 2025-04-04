@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_STRTOOFFT_H
-#define HEADER_CURL_STRTOOFFT_H
+#ifndef HEADER_CURL_VTLS_SPACK_H
+#define HEADER_CURL_VTLS_SPACK_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -23,32 +23,21 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-
 #include "curl_setup.h"
 
-/*
- * Determine which string to integral data type conversion function we use
- * to implement string conversion to our curl_off_t integral data type.
- *
- * Notice that curl_off_t might be 64 or 32 bits wide, and that it might use
- * an underlying data type which might be 'long', 'int64_t', 'long long' or
- * '__int64' and more remotely other data types.
- *
- * On systems where the size of curl_off_t is greater than the size of 'long'
- * the conversion function to use is strtoll() if it is available, otherwise,
- * we emulate its functionality with our own clone.
- *
- * On systems where the size of curl_off_t is smaller or equal than the size
- * of 'long' the conversion function to use is strtol().
- */
+#ifdef USE_SSLS_EXPORT
 
-typedef enum {
-  CURL_OFFT_OK,    /* parsed fine */
-  CURL_OFFT_FLOW,  /* over or underflow */
-  CURL_OFFT_INVAL  /* nothing was parsed */
-} CURLofft;
+struct dynbuf;
+struct Curl_ssl_session;
 
-CURLofft curlx_strtoofft(const char *str, char **endp, int base,
-                         curl_off_t *num);
+CURLcode Curl_ssl_session_pack(struct Curl_easy *data,
+                               struct Curl_ssl_session *s,
+                               struct dynbuf *buf);
 
-#endif /* HEADER_CURL_STRTOOFFT_H */
+CURLcode Curl_ssl_session_unpack(struct Curl_easy *data,
+                                 const void *bufv, size_t buflen,
+                                 struct Curl_ssl_session **ps);
+
+#endif /* USE_SSLS_EXPORT */
+
+#endif /* HEADER_CURL_VTLS_SPACK_H */

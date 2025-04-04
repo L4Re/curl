@@ -433,6 +433,9 @@
 /* If you have poll */
 #cmakedefine HAVE_POLL 1
 
+/* If you have realpath */
+#cmakedefine HAVE_REALPATH 1
+
 /* Define to 1 if you have the <poll.h> header file. */
 #cmakedefine HAVE_POLL_H 1
 
@@ -465,6 +468,9 @@
 
 /* Define to 1 if you have the sendmmsg function. */
 #cmakedefine HAVE_SENDMMSG 1
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#cmakedefine HAVE_STDINT_H 1
 
 /* Define to 1 if you have the 'fsetxattr' function. */
 #cmakedefine HAVE_FSETXATTR 1
@@ -543,12 +549,6 @@
 
 /* Define to 1 if you have the <stropts.h> header file. */
 #cmakedefine HAVE_STROPTS_H 1
-
-/* Define to 1 if you have the strtok_r function. */
-#cmakedefine HAVE_STRTOK_R 1
-
-/* Define to 1 if you have the strtoll function. */
-#cmakedefine HAVE_STRTOLL 1
 
 /* Define to 1 if you have the memrchr function. */
 #cmakedefine HAVE_MEMRCHR 1
@@ -631,24 +631,6 @@
 /* cpu-machine-OS */
 #cmakedefine CURL_OS ${CURL_OS}
 
-/* Name of package */
-#cmakedefine PACKAGE ${PACKAGE}
-
-/* Define to the address where bug reports for this package should be sent. */
-#cmakedefine PACKAGE_BUGREPORT ${PACKAGE_BUGREPORT}
-
-/* Define to the full name of this package. */
-#cmakedefine PACKAGE_NAME ${PACKAGE_NAME}
-
-/* Define to the full name and version of this package. */
-#cmakedefine PACKAGE_STRING ${PACKAGE_STRING}
-
-/* Define to the one symbol short name of this package. */
-#cmakedefine PACKAGE_TARNAME ${PACKAGE_TARNAME}
-
-/* Define to the version of this package. */
-#cmakedefine PACKAGE_VERSION ${PACKAGE_VERSION}
-
 /*
  Note: SIZEOF_* variables are fetched with CMake through check_type_size().
  As per CMake documentation on CheckTypeSize, C preprocessor code is
@@ -699,6 +681,9 @@ ${SIZEOF_TIME_T_CODE}
 
 /* if Secure Transport is enabled */
 #cmakedefine USE_SECTRANSP 1
+
+/* if SSL session export support is available */
+#cmakedefine USE_SSLS_EXPORT 1
 
 /* if mbedTLS is enabled */
 #cmakedefine USE_MBEDTLS 1
@@ -797,9 +782,6 @@ ${SIZEOF_TIME_T_CODE}
 /* enable multiple SSL backends */
 #cmakedefine CURL_WITH_MULTI_SSL 1
 
-/* Version number of package */
-#cmakedefine VERSION ${VERSION}
-
 /* Number of bits in a file offset, on hosts where this is settable. */
 #cmakedefine _FILE_OFFSET_BITS ${_FILE_OFFSET_BITS}
 
@@ -811,9 +793,6 @@ ${SIZEOF_TIME_T_CODE}
 
 /* Define to empty if `const' does not conform to ANSI C. */
 #cmakedefine const ${const}
-
-/* Type to use in place of in_addr_t when system does not provide it. */
-#cmakedefine in_addr_t ${in_addr_t}
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 #cmakedefine size_t ${size_t}
@@ -850,6 +829,3 @@ ${SIZEOF_TIME_T_CODE}
 
 /* Define to 1 if you have the SSL_set1_ech_config_list function. */
 #cmakedefine HAVE_SSL_SET1_ECH_CONFIG_LIST
-
-/* Define to 1 if you have the SSL_ech_set1_echconfig function. */
-#cmakedefine HAVE_SSL_ECH_SET1_ECHCONFIG

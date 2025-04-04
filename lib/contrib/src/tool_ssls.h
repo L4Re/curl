@@ -1,3 +1,5 @@
+#ifndef HEADER_CURL_TOOL_SSLS_H
+#define HEADER_CURL_TOOL_SSLS_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -21,19 +23,15 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-
 #include "tool_setup.h"
-#include "tool_hugehelp.h"
+#include "tool_operate.h"
 
-void hugehelp(void)
-{
-  puts("built-in manual was disabled at build-time");
-}
 
-void showhelp(const char *trigger, const char *arg, const char *endarg)
-{
-  (void)trigger;
-  (void)arg;
-  (void)endarg;
-  hugehelp();
-}
+CURLcode tool_ssls_load(struct GlobalConfig *global,
+                        struct OperationConfig *config,
+                        CURLSH *share, const char *filename);
+CURLcode tool_ssls_save(struct GlobalConfig *global,
+                        struct OperationConfig *config,
+                        CURLSH *share, const char *filename);
+
+#endif /* HEADER_CURL_TOOL_SSLS_H */

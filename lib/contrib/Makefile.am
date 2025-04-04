@@ -60,8 +60,12 @@ CMAKE_DIST =                                    \
  CMake/OtherTests.cmake                         \
  CMake/PickyWarnings.cmake                      \
  CMake/Utilities.cmake                          \
+ CMake/unix-cache.cmake                         \
  CMake/win32-cache.cmake                        \
- CMakeLists.txt
+ CMakeLists.txt                                 \
+ tests/cmake/CMakeLists.txt                     \
+ tests/cmake/test.c                             \
+ tests/cmake/test.sh
 
 VC_DIST = projects/README.md                           \
  projects/build-openssl.bat                            \
@@ -81,14 +85,8 @@ PLAN9_DIST = plan9/include/mkfile \
  plan9/src/mkfile.inc             \
  plan9/src/mkfile
 
-EXTRA_DIST = CHANGES.md COPYING Makefile.dist             \
- RELEASE-NOTES $(CMAKE_DIST) $(VC_DIST) $(WINBUILD_DIST)  \
- $(PLAN9_DIST) buildconf.bat Dockerfile
-
-CLEANFILES = $(VC14_LIBVCXPROJ) $(VC14_SRCVCXPROJ) \
- $(VC14_10_LIBVCXPROJ) $(VC14_10_SRCVCXPROJ)       \
- $(VC14_20_LIBVCXPROJ) $(VC14_20_SRCVCXPROJ)       \
- $(VC14_30_LIBVCXPROJ) $(VC14_30_SRCVCXPROJ)
+EXTRA_DIST = CHANGES.md COPYING RELEASE-NOTES Dockerfile \
+ $(CMAKE_DIST) $(VC_DIST) $(WINBUILD_DIST) $(PLAN9_DIST)
 
 DISTCLEANFILES = buildinfo.txt
 
@@ -100,13 +98,9 @@ DIST_SUBDIRS = $(SUBDIRS) tests packages include docs
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libcurl.pc
 
-# List of files required to generate VC IDE .dsp, .vcproj and .vcxproj files
-include lib/Makefile.inc
-include src/Makefile.inc
-
 dist-hook:
 	rm -rf $(top_builddir)/tests/log
-	find $(distdir) -name "*.dist" -a \! -name Makefile.dist -exec rm {} \;
+	find $(distdir) -name "*.dist" -exec rm {} \;
 	(distit=`find $(srcdir) -name "*.dist" | grep -v Makefile`; \
 	for file in $$distit; do \
 	  strip=`echo $$file | sed -e s/^$(srcdir)// -e s/\.dist//`; \
@@ -190,27 +184,6 @@ rpm:
 	rpm -ba --clean --rmsource $$RPM_TOPDIR/SPECS/$(RPMDIST).spec ; \
 	mv $$RPM_TOPDIR/RPMS/i386/$(RPMDIST)-*.rpm . ; \
 	mv $$RPM_TOPDIR/SRPMS/$(RPMDIST)-*.src.rpm .
-
-#
-# Build a Solaris pkgadd format file
-# run 'make pkgadd' once you've done './configure' and 'make' to make a Solaris pkgadd format
-# file (which ends up back in this directory).
-# The pkgadd file is in 'pkgtrans' format, so to install on Solaris, do
-# pkgadd -d ./HAXXcurl-*
-#
-
-# gak - libtool requires an absolute directory, hence the pwd below...
-pkgadd:
-	umask 022 ; \
-	$(MAKE) install DESTDIR=`/bin/pwd`/packages/Solaris/root ; \
-	cat COPYING > $(srcdir)/packages/Solaris/copyright ; \
-	cd $(srcdir)/packages/Solaris && $(MAKE) package
-
-#
-# Build a Cygwin binary tarball installation file
-# resulting .tar.bz2 file will end up at packages/Win32/cygwin
-cygwinbin:
-	$(MAKE) -C packages/Win32/cygwin cygwinbin
 
 # We extend the standard install with a custom hook:
 if BUILD_DOCS
