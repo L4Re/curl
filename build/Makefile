@@ -3,7 +3,7 @@ L4DIR  ?= $(PKGDIR)/../..
 
 TARGET             = curl
 REQUIRES_LIBS      = libcurl
-REQUIRES_LIBS     += libc_be_socket_lwip lwip_virtio_net lwip_ifconfig_env
+REQUIRES_LIBS     += libc_be_socket_lwip lwip_virtio_net lwip_ifconfig_env libmount
 DEPENDS_PKGS       = $(REQUIRES_LIBS)
 
 DEFINES            = -DHAVE_CONFIG_H=1

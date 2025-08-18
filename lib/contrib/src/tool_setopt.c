@@ -25,14 +25,10 @@
 
 #ifndef CURL_DISABLE_LIBCURL_OPTION
 
-#include "curlx.h"
-
 #include "tool_cfgable.h"
 #include "tool_easysrc.h"
 #include "tool_setopt.h"
 #include "tool_msgs.h"
-#include "dynbuf.h"
-
 #include "memdebug.h" /* keep this as LAST include */
 
 /* Lookup tables for converting setopt values back to symbols */
@@ -105,7 +101,7 @@ const struct NameValue setopt_nv_CURL_SSLVERSION[] = {
 };
 
 const struct NameValue setopt_nv_CURL_SSLVERSION_MAX[] = {
-  NV(CURL_SSLVERSION_MAX_NONE),
+  {"", CURL_SSLVERSION_MAX_NONE},
   NV(CURL_SSLVERSION_MAX_DEFAULT),
   NV(CURL_SSLVERSION_MAX_TLSv1_0),
   NV(CURL_SSLVERSION_MAX_TLSv1_1),
@@ -154,6 +150,14 @@ const struct NameValue setopt_nv_CURL_NETRC[] = {
   NVEND,
 };
 
+const struct NameValue setopt_nv_CURLOPT_FOLLOWLOCATION[] = {
+  NV(0L),
+  NV(CURLFOLLOW_ALL),
+  NV(CURLFOLLOW_OBEYCODE),
+  NV(CURLFOLLOW_FIRSTONLY),
+  NVEND,
+};
+
 /* These options have non-zero default values. */
 static const struct NameValue setopt_nv_CURLNONZERODEFAULTS[] = {
   NV1(CURLOPT_SSL_VERIFYPEER, 1),
@@ -177,7 +181,7 @@ static char *c_escape(const char *str, curl_off_t len)
   const char *s;
   unsigned int cutoff = 0;
   CURLcode result;
-  struct curlx_dynbuf escaped;
+  struct dynbuf escaped;
 
   curlx_dyn_init(&escaped, 4 * MAX_STRING_LENGTH_OUTPUT + 3);
 
@@ -221,14 +225,13 @@ static char *c_escape(const char *str, curl_off_t len)
     result = curlx_dyn_addn(&escaped, str, s - str);
 
   if(!result)
-    (void) !curlx_dyn_addn(&escaped, "...", cutoff);
+    (void)!curlx_dyn_addn(&escaped, "...", cutoff);
 
   return curlx_dyn_ptr(&escaped);
 }
 
 /* setopt wrapper for enum types */
-CURLcode tool_setopt_enum(CURL *curl, struct GlobalConfig *config,
-                          const char *name, CURLoption tag,
+CURLcode tool_setopt_enum(CURL *curl, const char *name, CURLoption tag,
                           const struct NameValue *nvlist, long lval)
 {
   CURLcode ret = CURLE_OK;
@@ -238,7 +241,7 @@ CURLcode tool_setopt_enum(CURL *curl, struct GlobalConfig *config,
   if(!lval)
     skip = TRUE;
 
-  if(config->libcurl && !skip && !ret) {
+  if(global->libcurl && !skip && !ret) {
     /* we only use this for real if --libcurl was used */
     const struct NameValue *nv = NULL;
     for(nv = nvlist; nv->name; nv++) {
@@ -260,14 +263,13 @@ CURLcode tool_setopt_enum(CURL *curl, struct GlobalConfig *config,
 
 #ifdef DEBUGBUILD
   if(ret)
-    warnf(config, "option %s returned error (%d)", name, (int)ret);
+    warnf("option %s returned error (%d)", name, (int)ret);
 #endif
   return ret;
 }
 
 /* setopt wrapper for CURLOPT_SSLVERSION */
-CURLcode tool_setopt_SSLVERSION(CURL *curl, struct GlobalConfig *config,
-                                const char *name, CURLoption tag,
+CURLcode tool_setopt_SSLVERSION(CURL *curl, const char *name, CURLoption tag,
                                 long lval)
 {
   CURLcode ret = CURLE_OK;
@@ -277,7 +279,7 @@ CURLcode tool_setopt_SSLVERSION(CURL *curl, struct GlobalConfig *config,
   if(!lval)
     skip = TRUE;
 
-  if(config->libcurl && !skip && !ret) {
+  if(global->libcurl && !skip && !ret) {
     /* we only use this for real if --libcurl was used */
     const struct NameValue *nv = NULL;
     const struct NameValue *nv2 = NULL;
@@ -297,22 +299,28 @@ CURLcode tool_setopt_SSLVERSION(CURL *curl, struct GlobalConfig *config,
                          name, lval);
     }
     else {
-      ret = easysrc_addf(&easysrc_code,
-                         "curl_easy_setopt(hnd, %s, (long)(%s | %s));",
-                         name, nv->name, nv2->name);
+      if(nv2->name && *nv2->name)
+        /* if max is set */
+        ret = easysrc_addf(&easysrc_code,
+                           "curl_easy_setopt(hnd, %s, (long)(%s | %s));",
+                           name, nv->name, nv2->name);
+      else
+        /* without a max */
+        ret = easysrc_addf(&easysrc_code,
+                           "curl_easy_setopt(hnd, %s, (long)%s);",
+                           name, nv->name);
     }
   }
 
 #ifdef DEBUGBUILD
   if(ret)
-    warnf(config, "option %s returned error (%d)", name, (int)ret);
+    warnf("option %s returned error (%d)", name, (int)ret);
 #endif
   return ret;
 }
 
 /* setopt wrapper for bitmasks */
-CURLcode tool_setopt_bitmask(CURL *curl, struct GlobalConfig *config,
-                             const char *name, CURLoption tag,
+CURLcode tool_setopt_bitmask(CURL *curl, const char *name, CURLoption tag,
                              const struct NameValueUnsigned *nvlist,
                              long lval)
 {
@@ -321,7 +329,7 @@ CURLcode tool_setopt_bitmask(CURL *curl, struct GlobalConfig *config,
   if(!lval)
     skip = TRUE;
 
-  if(config->libcurl && !skip && !ret) {
+  if(global->libcurl && !skip && !ret) {
     /* we only use this for real if --libcurl was used */
     char preamble[80];
     unsigned long rest = (unsigned long)lval;
@@ -383,13 +391,13 @@ static CURLcode libcurl_generate_slist(struct curl_slist *slist, int *slistno)
 }
 
 static CURLcode libcurl_generate_mime(CURL *curl,
-                                      struct GlobalConfig *config,
+                                      struct OperationConfig *config,
                                       struct tool_mime *toolmime,
                                       int *mimeno);     /* Forward. */
 
 /* Wrapper to generate source code for a mime part. */
 static CURLcode libcurl_generate_mime_part(CURL *curl,
-                                           struct GlobalConfig *config,
+                                           struct OperationConfig *config,
                                            struct tool_mime *part,
                                            int mimeno)
 {
@@ -501,8 +509,7 @@ static CURLcode libcurl_generate_mime_part(CURL *curl,
                          "curl_mime_headers(part%d, slist%d, 1);",
                          mimeno, slistno);
       if(!ret)
-        ret = easysrc_addf(&easysrc_code,
-                           "slist%d = NULL;", slistno); /* Prevent CLEANing. */
+        ret = easysrc_addf(&easysrc_code, "slist%d = NULL;", slistno);
     }
   }
 
@@ -511,7 +518,7 @@ static CURLcode libcurl_generate_mime_part(CURL *curl,
 
 /* Wrapper to generate source code for a mime structure. */
 static CURLcode libcurl_generate_mime(CURL *curl,
-                                      struct GlobalConfig *config,
+                                      struct OperationConfig *config,
                                       struct tool_mime *toolmime,
                                       int *mimeno)
 {
@@ -541,16 +548,15 @@ static CURLcode libcurl_generate_mime(CURL *curl,
 }
 
 /* setopt wrapper for CURLOPT_MIMEPOST */
-CURLcode tool_setopt_mimepost(CURL *curl, struct GlobalConfig *config,
+CURLcode tool_setopt_mimepost(CURL *curl, struct OperationConfig *config,
                               const char *name, CURLoption tag,
                               curl_mime *mimepost)
 {
   CURLcode ret = curl_easy_setopt(curl, tag, mimepost);
   int mimeno = 0;
 
-  if(!ret && config->libcurl) {
-    ret = libcurl_generate_mime(curl, config,
-                                config->current->mimeroot, &mimeno);
+  if(!ret && global->libcurl) {
+    ret = libcurl_generate_mime(curl, config, config->mimeroot, &mimeno);
 
     if(!ret)
       ret = easysrc_addf(&easysrc_code, "curl_easy_setopt(hnd, %s, mime%d);",
@@ -561,15 +567,14 @@ CURLcode tool_setopt_mimepost(CURL *curl, struct GlobalConfig *config,
 }
 
 /* setopt wrapper for curl_slist options */
-CURLcode tool_setopt_slist(CURL *curl, struct GlobalConfig *config,
-                           const char *name, CURLoption tag,
+CURLcode tool_setopt_slist(CURL *curl, const char *name, CURLoption tag,
                            struct curl_slist *list)
 {
   CURLcode ret = CURLE_OK;
 
   ret = curl_easy_setopt(curl, tag, list);
 
-  if(config->libcurl && list && !ret) {
+  if(global->libcurl && list && !ret) {
     int i;
 
     ret = libcurl_generate_slist(list, &i);
@@ -582,8 +587,7 @@ CURLcode tool_setopt_slist(CURL *curl, struct GlobalConfig *config,
 }
 
 /* options that set long */
-CURLcode tool_setopt_long(CURL *curl, struct GlobalConfig *global,
-                          const char *name, CURLoption tag,
+CURLcode tool_setopt_long(CURL *curl, const char *name, CURLoption tag,
                           long lval)
 {
   long defval = 0L;
@@ -608,8 +612,7 @@ CURLcode tool_setopt_long(CURL *curl, struct GlobalConfig *global,
 }
 
 /* options that set curl_off_t */
-CURLcode tool_setopt_offt(CURL *curl, struct GlobalConfig *global,
-                          const char *name, CURLoption tag,
+CURLcode tool_setopt_offt(CURL *curl, const char *name, CURLoption tag,
                           curl_off_t lval)
 {
   CURLcode ret = CURLE_OK;
@@ -626,9 +629,9 @@ CURLcode tool_setopt_offt(CURL *curl, struct GlobalConfig *global,
 }
 
 /* setopt wrapper for setting object and function pointer options */
-CURLcode tool_setopt(CURL *curl, bool str, struct GlobalConfig *global,
-                     struct OperationConfig *config,
-                     const char *name, CURLoption tag, ...)
+CURLcode tool_setopt(CURL *curl, struct OperationConfig *config,
+                     bool str, const char *name, CURLoption tag,
+                     ...)
 {
   va_list arg;
   CURLcode ret = CURLE_OK;
