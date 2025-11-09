@@ -45,7 +45,7 @@
  * beginning of a perform session. It must reset the session-info variables,
  * in particular all variables in struct PureInfo.
  */
-CURLcode Curl_initinfo(struct Curl_easy *data)
+void Curl_initinfo(struct Curl_easy *data)
 {
   struct Progress *pro = &data->progress;
   struct PureInfo *info = &data->info;
@@ -91,7 +91,6 @@ CURLcode Curl_initinfo(struct Curl_easy *data)
 #ifdef USE_SSL
   Curl_ssl_free_certinfo(data);
 #endif
-  return CURLE_OK;
 }
 
 static CURLcode getinfo_char(struct Curl_easy *data, CURLINFO info,
@@ -621,7 +620,7 @@ CURLcode Curl_getinfo(struct Curl_easy *data, CURLINFO info, ...)
   struct curl_slist **param_slistp = NULL;
   curl_socket_t *param_socketp = NULL;
   int type;
-  CURLcode result = CURLE_UNKNOWN_OPTION;
+  CURLcode result = CURLE_BAD_FUNCTION_ARGUMENT;
 
   if(!data)
     return CURLE_BAD_FUNCTION_ARGUMENT;
@@ -661,6 +660,7 @@ CURLcode Curl_getinfo(struct Curl_easy *data, CURLINFO info, ...)
       result = getinfo_socket(data, info, param_socketp);
     break;
   default:
+    result = CURLE_UNKNOWN_OPTION;
     break;
   }
 

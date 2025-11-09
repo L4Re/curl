@@ -43,7 +43,6 @@
 #include "urldata.h"
 
 #include "curlx/base64.h"
-#include "curl_md5.h"
 #include "vauth/vauth.h"
 #include "cfilters.h"
 #include "vtls/vtls.h"
@@ -51,8 +50,8 @@
 #include "curl_sasl.h"
 #include "curlx/warnless.h"
 #include "sendf.h"
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -812,7 +811,9 @@ CURLcode Curl_sasl_continue(struct SASL *sasl, struct Curl_easy *data,
 
   case SASL_CANCEL:
     /* Remove the offending mechanism from the supported list */
-    sasl->authmechs ^= sasl->authused;
+    sasl->authmechs &= (unsigned short)~sasl->authused;
+    sasl->authused = SASL_AUTH_NONE;
+    sasl->curmech = NULL;
 
     /* Start an alternative SASL authentication */
     return Curl_sasl_start(sasl, data, sasl->force_ir, progress);
@@ -931,10 +932,10 @@ CURLcode Curl_sasl_is_blocked(struct SASL *sasl, struct Curl_easy *data)
                   CURL_SASL_DIGEST, TRUE, NULL);
     sasl_unchosen(data, SASL_MECH_NTLM, enabledmechs,
                   CURL_SASL_NTLM, Curl_auth_is_ntlm_supported(), NULL);
-    sasl_unchosen(data, SASL_MECH_OAUTHBEARER, enabledmechs,  TRUE, TRUE,
+    sasl_unchosen(data, SASL_MECH_OAUTHBEARER, enabledmechs, TRUE, TRUE,
                   data->set.str[STRING_BEARER] ?
                   NULL : "CURLOPT_XOAUTH2_BEARER");
-    sasl_unchosen(data, SASL_MECH_XOAUTH2, enabledmechs,  TRUE, TRUE,
+    sasl_unchosen(data, SASL_MECH_XOAUTH2, enabledmechs, TRUE, TRUE,
                   data->set.str[STRING_BEARER] ?
                   NULL : "CURLOPT_XOAUTH2_BEARER");
   }

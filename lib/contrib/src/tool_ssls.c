@@ -45,8 +45,9 @@ static CURLcode tool_ssls_easy(struct OperationConfig *config,
 
   result = curl_easy_setopt(*peasy, CURLOPT_SHARE, share);
   if(!result && (global->tracetype != TRACE_NONE)) {
-    my_setopt(*peasy, CURLOPT_DEBUGFUNCTION, tool_debug_cb);
-    my_setopt(*peasy, CURLOPT_DEBUGDATA, config);
+    result = my_setopt_ptr(*peasy, CURLOPT_DEBUGFUNCTION, tool_debug_cb);
+    if(!result)
+      result = my_setopt_ptr(*peasy, CURLOPT_DEBUGDATA, config);
     my_setopt_long(*peasy, CURLOPT_VERBOSE, 1L);
   }
   return result;
@@ -66,7 +67,7 @@ CURLcode tool_ssls_load(struct OperationConfig *config,
   bool error = FALSE;
 
   curlx_dyn_init(&buf, MAX_SSLS_LINE);
-  fp = fopen(filename, FOPEN_READTEXT);
+  fp = curlx_fopen(filename, FOPEN_READTEXT);
   if(!fp) { /* ok if it does not exist */
     notef("SSL session file does not exist (yet?): %s", filename);
     goto out;
@@ -122,7 +123,7 @@ out:
   if(easy)
     curl_easy_cleanup(easy);
   if(fp)
-    fclose(fp);
+    curlx_fclose(fp);
   curlx_dyn_free(&buf);
   curl_free(shmac);
   curl_free(sdata);
@@ -190,7 +191,7 @@ CURLcode tool_ssls_save(struct OperationConfig *config,
   CURLcode r = CURLE_OK;
 
   ctx.exported = 0;
-  ctx.fp = fopen(filename, FOPEN_WRITETEXT);
+  ctx.fp = curlx_fopen(filename, FOPEN_WRITETEXT);
   if(!ctx.fp) {
     warnf("Warning: Failed to create SSL session file %s",
           filename);
@@ -207,6 +208,6 @@ out:
   if(easy)
     curl_easy_cleanup(easy);
   if(ctx.fp)
-    fclose(ctx.fp);
+    curlx_fclose(ctx.fp);
   return r;
 }

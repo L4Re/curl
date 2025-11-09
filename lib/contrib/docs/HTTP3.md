@@ -87,14 +87,15 @@ Build curl:
      % git clone https://github.com/curl/curl
      % cd curl
      % autoreconf -fi
-     % LDFLAGS="-Wl,-rpath,<somewhere1>/lib" ./configure --with-openssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2=<somewhere3>
+     % LDFLAGS="-Wl,-rpath,<somewhere1>/lib" ./configure PKG_CONFIG_PATH=<ngtcp2-root>/lib/pkgconfig --with-openssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2
      % make
      % make install
 
 ## Build with quictls
 
-OpenSSL does not offer the required APIs for building a QUIC client. You need
-to use a TLS library that has such APIs and that works with *ngtcp2*.
+OpenSSL before version 3.5 does not offer the required APIs for building a
+QUIC client. You need to use a TLS library that has such APIs and that works
+with *ngtcp2*.
 
 Build quictls (any `+quic` tagged version works):
 
@@ -131,7 +132,7 @@ Build curl:
      % git clone https://github.com/curl/curl
      % cd curl
      % autoreconf -fi
-     % LDFLAGS="-Wl,-rpath,<somewhere1>/lib" ./configure --with-openssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2=<somewhere3>
+     % LDFLAGS="-Wl,-rpath,<somewhere1>/lib" ./configure PKG_CONFIG_PATH=<ngtcp2-root>/lib/pkgconfig --with-openssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2
      % make
      % make install
 
@@ -173,7 +174,7 @@ Build curl:
      % git clone https://github.com/curl/curl
      % cd curl
      % autoreconf -fi
-     % ./configure --with-gnutls=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2=<somewhere3>
+     % ./configure PKG_CONFIG_PATH=<ngtcp2-root>/lib/pkgconfig --with-gnutls=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2
      % make
      % make install
 
@@ -215,7 +216,7 @@ Build curl:
      % git clone https://github.com/curl/curl
      % cd curl
      % autoreconf -fi
-     % ./configure --with-wolfssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2=<somewhere3>
+     % ./configure PKG_CONFIG_PATH=<ngtcp2-root>/lib/pkgconfig --with-wolfssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2
      % make
      % make install
 

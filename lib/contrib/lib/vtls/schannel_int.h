@@ -29,6 +29,7 @@
 #ifdef USE_SCHANNEL
 
 #include "vtls.h"
+#include "../curl_sha256.h"
 
 #if defined(_MSC_VER) && (_MSC_VER <= 1600)
 /* Workaround for warning:
@@ -99,7 +100,6 @@ typedef struct _SCH_CREDENTIALS {
 
 struct Curl_schannel_cred {
   CredHandle cred_handle;
-  TimeStamp time_stamp;
   TCHAR *sni_hostname;
   HCERTSTORE client_cert_store;
   int refcount;
@@ -107,7 +107,6 @@ struct Curl_schannel_cred {
 
 struct Curl_schannel_ctxt {
   CtxtHandle ctxt_handle;
-  TimeStamp time_stamp;
 };
 
 struct schannel_ssl_backend_data {
@@ -123,6 +122,11 @@ struct schannel_ssl_backend_data {
      more bytes into encdata then set this back to false. */
   unsigned long req_flags, ret_flags;
   CURLcode recv_unrecoverable_err; /* schannel_recv had an unrecoverable err */
+  struct schannel_renegotiate_state {
+    bool started;
+    struct curltime start_time;
+    int io_need;
+  } renegotiate_state;
   BIT(recv_sspi_close_notify); /* true if connection closed by close_notify */
   BIT(recv_connection_closed); /* true if connection closed, regardless how */
   BIT(recv_renegotiating);     /* true if recv is doing renegotiation */

@@ -41,10 +41,9 @@
 #ifdef USE_OPENSSL
 #  include <openssl/opensslv.h>
 #  if (!defined(LIBRESSL_VERSION_NUMBER) && \
-        defined(OPENSSL_VERSION_NUMBER) && \
-        (OPENSSL_VERSION_NUMBER >= 0x10101000L)) || \
+       OPENSSL_VERSION_NUMBER >= 0x10101000L) || \
       (defined(LIBRESSL_VERSION_NUMBER) && \
-        (LIBRESSL_VERSION_NUMBER >= 0x3080000fL))
+       LIBRESSL_VERSION_NUMBER >= 0x3080000fL)
 #    include <openssl/opensslconf.h>
 #    if !defined(OPENSSL_NO_SHA) && !defined(OPENSSL_NO_SHA512)
 #      include <openssl/evp.h>
@@ -345,7 +344,7 @@ static CURL_FORCEINLINE curl_uint64_t Curl_rotr64(curl_uint64_t value,
  * Size of the SHA-512/256 resulting digest in words.
  * This is the final digest size, not intermediate hash.
  */
-#define SHA512_256_DIGEST_SIZE_WORDS (SHA512_256_HASH_SIZE_WORDS  / 2)
+#define SHA512_256_DIGEST_SIZE_WORDS (SHA512_256_HASH_SIZE_WORDS / 2)
 
 /**
  * Size of the SHA-512/256 resulting digest in bytes
@@ -666,7 +665,6 @@ static CURLcode Curl_sha512_256_update(void *context,
 }
 
 
-
 /**
  * Size of "length" insertion in bits.
  * See FIPS PUB 180-4 section 5.1.2.
@@ -761,7 +759,6 @@ static CURLcode Curl_sha512_256_finish(unsigned char *digest, void *context)
 }
 
 #endif /* Local SHA-512/256 code */
-
 
 /**
  * Compute SHA-512/256 hash for the given data in one function call

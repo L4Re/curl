@@ -23,7 +23,7 @@
  ***************************************************************************/
 
 /* Escape and unescape URL encoding in strings. The functions return a new
- * allocated string or NULL if an error occurred.  */
+ * allocated string or NULL if an error occurred. */
 
 #include "curl_setup.h"
 
@@ -34,11 +34,10 @@ struct Curl_easy;
 #include "urldata.h"
 #include "curlx/warnless.h"
 #include "escape.h"
-#include "strdup.h"
 #include "curlx/strparse.h"
-
-/* The last 3 #include files should be in this order */
 #include "curl_printf.h"
+
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 

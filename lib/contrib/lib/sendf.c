@@ -50,14 +50,12 @@
 #include "multiif.h"
 #include "strerror.h"
 #include "select.h"
-#include "strdup.h"
 #include "http2.h"
 #include "progress.h"
 #include "curlx/warnless.h"
 #include "ws.h"
 
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -151,7 +149,7 @@ CURLcode Curl_client_start(struct Curl_easy *data)
 
     CURL_TRC_READ(data, "client start, rewind readers");
     while(r) {
-      result = r->crt->rewind(data, r);
+      result = r->crt->cntrl(data, r, CURL_CRCNTRL_REWIND);
       if(result) {
         failf(data, "rewind of client reader '%s' failed: %d",
               r->crt->name, result);
@@ -218,15 +216,15 @@ static size_t get_max_body_write_len(struct Curl_easy *data, curl_off_t limit)
       return 0;
     }
 #if SIZEOF_CURL_OFF_T > SIZEOF_SIZE_T
-    else if(remain_diff > SSIZE_T_MAX) {
-      return SIZE_T_MAX;
+    else if(remain_diff > SSIZE_MAX) {
+      return SIZE_MAX;
     }
 #endif
     else {
       return (size_t)remain_diff;
     }
   }
-  return SIZE_T_MAX;
+  return SIZE_MAX;
 }
 
 struct cw_download_ctx {
@@ -318,9 +316,7 @@ static CURLcode cw_download_write(struct Curl_easy *data,
   }
   /* Update stats, write and report progress */
   data->req.bytecount += nwrite;
-  result = Curl_pgrsSetDownloadCounter(data, data->req.bytecount);
-  if(result)
-    return result;
+  Curl_pgrsSetDownloadCounter(data, data->req.bytecount);
 
   if(excess_len) {
     if(!data->req.ignorebody) {
@@ -543,6 +539,15 @@ CURLcode Curl_creader_read(struct Curl_easy *data,
   return reader->crt->do_read(data, reader, buf, blen, nread, eos);
 }
 
+void Curl_creader_clear_eos(struct Curl_easy *data,
+                            struct Curl_creader *reader)
+{
+  while(reader) {
+    (void)reader->crt->cntrl(data, reader, CURL_CRCNTRL_CLEAR_EOS);
+    reader = reader->next;
+  }
+}
+
 CURLcode Curl_creader_def_init(struct Curl_easy *data,
                                struct Curl_creader *reader)
 {
@@ -598,19 +603,13 @@ CURLcode Curl_creader_def_resume_from(struct Curl_easy *data,
   return CURLE_READ_ERROR;
 }
 
-CURLcode Curl_creader_def_rewind(struct Curl_easy *data,
-                                 struct Curl_creader *reader)
+CURLcode Curl_creader_def_cntrl(struct Curl_easy *data,
+                                struct Curl_creader *reader,
+                                Curl_creader_cntrl opcode)
 {
   (void)data;
   (void)reader;
-  return CURLE_OK;
-}
-
-CURLcode Curl_creader_def_unpause(struct Curl_easy *data,
-                                  struct Curl_creader *reader)
-{
-  (void)data;
-  (void)reader;
+  (void)opcode;
   return CURLE_OK;
 }
 
@@ -854,7 +853,7 @@ static CURLcode cr_in_rewind(struct Curl_easy *data,
     Curl_set_in_callback(data, FALSE);
     CURL_TRC_READ(data, "cr_in, rewind via set.seek_func -> %d", err);
     if(err) {
-      failf(data, "seek callback returned error %d", (int)err);
+      failf(data, "seek callback returned error %d", err);
       return CURLE_SEND_FAIL_REWIND;
     }
   }
@@ -875,7 +874,14 @@ static CURLcode cr_in_rewind(struct Curl_easy *data,
     /* If no CURLOPT_READFUNCTION is used, we know that we operate on a
        given FILE * stream and we can actually attempt to rewind that
        ourselves with fseek() */
+#if defined(__clang__) && __clang_major__ >= 16
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-strict"
+#endif
     if(data->state.fread_func == (curl_read_callback)fread) {
+#if defined(__clang__) && __clang_major__ >= 16
+#pragma clang diagnostic pop
+#endif
       int err = fseek(data->state.in, 0, SEEK_SET);
       CURL_TRC_READ(data, "cr_in, rewind via fseek -> %d(%d)",
                     (int)err, (int)errno);
@@ -891,12 +897,24 @@ static CURLcode cr_in_rewind(struct Curl_easy *data,
   return CURLE_OK;
 }
 
-static CURLcode cr_in_unpause(struct Curl_easy *data,
-                              struct Curl_creader *reader)
+static CURLcode cr_in_cntrl(struct Curl_easy *data,
+                            struct Curl_creader *reader,
+                            Curl_creader_cntrl opcode)
 {
   struct cr_in_ctx *ctx = reader->ctx;
-  (void)data;
-  ctx->is_paused = FALSE;
+
+  switch(opcode) {
+  case CURL_CRCNTRL_REWIND:
+    return cr_in_rewind(data, reader);
+  case CURL_CRCNTRL_UNPAUSE:
+    ctx->is_paused = FALSE;
+    break;
+  case CURL_CRCNTRL_CLEAR_EOS:
+    ctx->seen_eos = FALSE;
+    break;
+  default:
+    break;
+  }
   return CURLE_OK;
 }
 
@@ -916,8 +934,7 @@ static const struct Curl_crtype cr_in = {
   cr_in_needs_rewind,
   cr_in_total_length,
   cr_in_resume_from,
-  cr_in_rewind,
-  cr_in_unpause,
+  cr_in_cntrl,
   cr_in_is_paused,
   Curl_creader_def_done,
   sizeof(struct cr_in_ctx)
@@ -1077,8 +1094,7 @@ static const struct Curl_crtype cr_lc = {
   Curl_creader_def_needs_rewind,
   cr_lc_total_length,
   Curl_creader_def_resume_from,
-  Curl_creader_def_rewind,
-  Curl_creader_def_unpause,
+  Curl_creader_def_cntrl,
   Curl_creader_def_is_paused,
   Curl_creader_def_done,
   sizeof(struct cr_lc_ctx)
@@ -1251,8 +1267,7 @@ static const struct Curl_crtype cr_null = {
   Curl_creader_def_needs_rewind,
   cr_null_total_length,
   Curl_creader_def_resume_from,
-  Curl_creader_def_rewind,
-  Curl_creader_def_unpause,
+  Curl_creader_def_cntrl,
   Curl_creader_def_is_paused,
   Curl_creader_def_done,
   sizeof(struct Curl_creader)
@@ -1312,12 +1327,19 @@ static bool cr_buf_needs_rewind(struct Curl_easy *data,
   return ctx->index > 0;
 }
 
-static CURLcode cr_buf_rewind(struct Curl_easy *data,
-                              struct Curl_creader *reader)
+static CURLcode cr_buf_cntrl(struct Curl_easy *data,
+                             struct Curl_creader *reader,
+                             Curl_creader_cntrl opcode)
 {
   struct cr_buf_ctx *ctx = reader->ctx;
   (void)data;
-  ctx->index = 0;
+  switch(opcode) {
+  case CURL_CRCNTRL_REWIND:
+    ctx->index = 0;
+    break;
+  default:
+    break;
+  }
   return CURLE_OK;
 }
 
@@ -1360,8 +1382,7 @@ static const struct Curl_crtype cr_buf = {
   cr_buf_needs_rewind,
   cr_buf_total_length,
   cr_buf_resume_from,
-  cr_buf_rewind,
-  Curl_creader_def_unpause,
+  cr_buf_cntrl,
   Curl_creader_def_is_paused,
   Curl_creader_def_done,
   sizeof(struct cr_buf_ctx)
@@ -1417,7 +1438,8 @@ CURLcode Curl_creader_unpause(struct Curl_easy *data)
   CURLcode result = CURLE_OK;
 
   while(reader) {
-    result = reader->crt->unpause(data, reader);
+    result = reader->crt->cntrl(data, reader, CURL_CRCNTRL_UNPAUSE);
+    CURL_TRC_READ(data, "unpausing %s -> %d", reader->crt->name, result);
     if(result)
       break;
     reader = reader->next;

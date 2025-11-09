@@ -362,7 +362,7 @@ static int parsedate(const char *date, time_t *output)
   time_t t = 0;
   int wdaynum = -1;  /* day of the week number, 0-6 (mon-sun) */
   int monnum = -1;   /* month of the year number, 0-11 */
-  int mdaynum = -1; /* day of month, 1 - 31 */
+  int mdaynum = -1;  /* day of month, 1 - 31 */
   int hournum = -1;
   int minnum = -1;
   int secnum = -1;
@@ -589,26 +589,12 @@ time_t curl_getdate(const char *p, const time_t *now)
 
 /* Curl_getdate_capped() differs from curl_getdate() in that this will return
    TIME_T_MAX in case the parsed time value was too big, instead of an
-   error. */
+   error. Returns non-zero on error. */
 
-time_t Curl_getdate_capped(const char *p)
+int Curl_getdate_capped(const char *p, time_t *tp)
 {
-  time_t parsed = -1;
-  int rc = parsedate(p, &parsed);
-
-  switch(rc) {
-  case PARSEDATE_OK:
-    if(parsed == (time_t)-1)
-      /* avoid returning -1 for a working scenario */
-      parsed++;
-    return parsed;
-  case PARSEDATE_LATER:
-    /* this returns the maximum time value */
-    return parsed;
-  default:
-    return -1; /* everything else is fail */
-  }
-  /* UNREACHABLE */
+  int rc = parsedate(p, tp);
+  return (rc == PARSEDATE_FAIL);
 }
 
 /*

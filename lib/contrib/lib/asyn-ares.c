@@ -61,7 +61,6 @@
 #include "progress.h"
 #include "curlx/timediff.h"
 #include "httpsrr.h"
-#include "strdup.h"
 
 #include <ares.h>
 #include <ares_version.h> /* really old c-ares did not include this by
@@ -85,20 +84,7 @@
 #if ARES_VERSION >= 0x011000
 /* 1.16.0 or later has ares_getaddrinfo */
 #define HAVE_CARES_GETADDRINFO 1
-#endif
-
-#ifdef USE_HTTPSRR
-#if ARES_VERSION < 0x011c00
-#error "requires c-ares 1.28.0 or newer for HTTPSRR"
-#endif
-#define HTTPSRR_WORKS
-#endif
-
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
-#include "curl_memory.h"
-#include "memdebug.h"
-
+#else
 /* How long we are willing to wait for additional parallel responses after
    obtaining a "definitive" one. For old c-ares without getaddrinfo.
 
@@ -109,6 +95,18 @@
    See query_completed_cb() for an explanation of how this is used.
  */
 #define HAPPY_EYEBALLS_DNS_TIMEOUT 5000
+#endif
+
+#ifdef USE_HTTPSRR
+#if ARES_VERSION < 0x011c00
+#error "requires c-ares 1.28.0 or newer for HTTPSRR"
+#endif
+#define HTTPSRR_WORKS
+#endif
+
+/* The last 2 #include files should be in this order */
+#include "curl_memory.h"
+#include "memdebug.h"
 
 #define CARES_TIMEOUT_PER_ATTEMPT 2000
 
@@ -280,8 +278,9 @@ void Curl_async_ares_destroy(struct Curl_easy *data)
 CURLcode Curl_async_pollset(struct Curl_easy *data, struct easy_pollset *ps)
 {
   struct async_ares_ctx *ares = &data->state.async.ares;
-  DEBUGASSERT(ares->channel);
-  return Curl_ares_pollset(data, ares->channel, ps);
+  if(ares->channel)
+    return Curl_ares_pollset(data, ares->channel, ps);
+  return CURLE_OK;
 }
 
 /*
@@ -302,11 +301,13 @@ CURLcode Curl_async_is_resolved(struct Curl_easy *data,
 
   if(data->state.async.done) {
     *dns = data->state.async.dns;
-    return CURLE_OK;
+    return ares->result;
   }
 
-  if(Curl_ares_perform(ares->channel, 0) < 0)
-    return CURLE_UNRECOVERABLE_POLL;
+  if(Curl_ares_perform(ares->channel, 0) < 0) {
+    result = CURLE_UNRECOVERABLE_POLL;
+    goto out;
+  }
 
 #ifndef HAVE_CARES_GETADDRINFO
   /* Now that we have checked for any last minute results above, see if there
@@ -358,32 +359,10 @@ CURLcode Curl_async_is_resolved(struct Curl_easy *data,
     /* if we have not found anything, report the proper
      * CURLE_COULDNT_RESOLVE_* code */
     if(!result && !data->state.async.dns) {
-      result = Curl_resolver_error(data);
-      if(ares->ares_status != ARES_SUCCESS) {
-        const char *msg;
-        switch(ares->ares_status) {
-        case ARES_ECONNREFUSED:
-          msg = "connection to DNS server refused";
-          break;
-        case ARES_ETIMEOUT:
-          msg = "query to DNS server timed out";
-          break;
-        case ARES_ENOTFOUND:
-          msg = "DNS server did not find the address";
-          break;
-        case ARES_EREFUSED:
-          msg = "DNS server refused query";
-          break;
-        default:
-          msg = "resolve failed";
-          break;
-        }
-        CURL_TRC_DNS(data, "asyn-ares: %s (error %d)", msg, ares->ares_status);
-#if ARES_VERSION >= 0x011800  /* >= v1.24.0 */
-        CURL_TRC_DNS(data, "asyn-ares config: %s",
-                     ares_get_servers_csv(ares->channel));
-#endif
-      }
+      const char *msg = NULL;
+      if(ares->ares_status != ARES_SUCCESS)
+        msg = ares_strerror(ares->ares_status);
+      result = Curl_resolver_error(data, msg);
     }
 
     if(result)
@@ -393,6 +372,9 @@ CURLcode Curl_async_is_resolved(struct Curl_easy *data,
                  result, *dns ? "" : "not ");
     async_ares_cleanup(data);
   }
+
+out:
+  ares->result = result;
   return result;
 }
 
@@ -534,8 +516,6 @@ static void async_ares_hostbyname_cb(void *user_data,
   (void)timeouts; /* ignored */
 
   if(ARES_EDESTRUCTION == status)
-    /* when this ares handle is getting destroyed, the 'arg' pointer may not
-       be valid so only defer it when we know the 'status' says its fine! */
     return;
 
   if(ARES_SUCCESS == status) {
@@ -750,6 +730,9 @@ struct Curl_addrinfo *Curl_async_getaddrinfo(struct Curl_easy *data,
                                              int *waitp)
 {
   struct async_ares_ctx *ares = &data->state.async.ares;
+#ifdef USE_HTTPSRR
+  char *rrname = NULL;
+#endif
   *waitp = 0; /* default to synchronous response */
 
   if(async_ares_init_lazy(data))
@@ -762,10 +745,28 @@ struct Curl_addrinfo *Curl_async_getaddrinfo(struct Curl_easy *data,
   data->state.async.hostname = strdup(hostname);
   if(!data->state.async.hostname)
     return NULL;
+#ifdef USE_HTTPSRR
+  if(port != 443) {
+    rrname = curl_maprintf("_%d_.https.%s", port, hostname);
+    if(!rrname) {
+      free(data->state.async.hostname);
+      return NULL;
+    }
+  }
+#endif
 
   /* initial status - failed */
   ares->ares_status = ARES_ENOTFOUND;
   ares->result = CURLE_OK;
+
+#if !defined(CURL_DISABLE_VERBOSE_STRINGS) && \
+  ARES_VERSION >= 0x011800  /* >= v1.24.0 */
+  if(CURL_TRC_DNS_is_verbose(data)) {
+    char *csv = ares_get_servers_csv(ares->channel);
+    CURL_TRC_DNS(data, "asyn-ares: servers=%s", csv);
+    ares_free_string(csv);
+  }
+#endif
 
 #ifdef HAVE_CARES_GETADDRINFO
   {
@@ -794,7 +795,7 @@ struct Curl_addrinfo *Curl_async_getaddrinfo(struct Curl_easy *data,
      * accordingly to save a call to getservbyname in inside C-Ares
      */
     hints.ai_flags = ARES_AI_NUMERICSERV;
-    msnprintf(service, sizeof(service), "%d", port);
+    curl_msnprintf(service, sizeof(service), "%d", port);
     ares->num_pending = 1;
     ares_getaddrinfo(ares->channel, data->state.async.hostname,
                      service, &hints, async_ares_addrinfo_cb, data);
@@ -806,7 +807,7 @@ struct Curl_addrinfo *Curl_async_getaddrinfo(struct Curl_easy *data,
     /* The stack seems to be IPv6-enabled */
     /* areschannel is already setup in the Curl_open() function */
     CURL_TRC_DNS(data, "asyn-ares: fire off query for A");
-    ares_gethostbyname(ares->channel, hostname, PF_INET,
+    ares_gethostbyname(ares->channel, data->state.async.hostname, PF_INET,
                        async_ares_hostbyname_cb, data);
     CURL_TRC_DNS(data, "asyn-ares: fire off query for AAAA");
     ares->num_pending = 2;
@@ -825,11 +826,14 @@ struct Curl_addrinfo *Curl_async_getaddrinfo(struct Curl_easy *data,
 #endif
 #ifdef USE_HTTPSRR
   {
-    CURL_TRC_DNS(data, "asyn-ares: fire off query for HTTPSRR");
+    CURL_TRC_DNS(data, "asyn-ares: fire off query for HTTPSRR: %s",
+                 rrname ? rrname : data->state.async.hostname);
     memset(&ares->hinfo, 0, sizeof(ares->hinfo));
     ares->hinfo.port = -1;
+    ares->hinfo.rrname = rrname;
     ares->num_pending++; /* one more */
-    ares_query_dnsrec(ares->channel, data->state.async.hostname,
+    ares_query_dnsrec(ares->channel,
+                      rrname ? rrname : data->state.async.hostname,
                       ARES_CLASS_IN, ARES_REC_TYPE_HTTPS,
                       async_ares_rr_done, data, NULL);
   }

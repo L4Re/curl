@@ -46,7 +46,7 @@
    fail. Fixed in 14.2.0_1. Disable the workaround if the fix is detected. */
 #if defined(__APPLE__) && !defined(__clang__) && defined(__GNUC__) && \
   defined(__has_attribute)
-#  if !defined(__has_feature)
+#  if !defined(__has_feature)  /* Keep this PP check separate from others */
 #    define availability curl_pp_attribute_disabled
 #  elif !__has_feature(attribute_availability)
 #    define availability curl_pp_attribute_disabled
@@ -385,7 +385,7 @@
  * performing this task will result in a synthesized IPv6 address.
  */
 #if defined(__APPLE__) && !defined(USE_ARES)
-#define USE_RESOLVE_ON_IPS 1
+#  define USE_RESOLVE_ON_IPS 1
 #  if TARGET_OS_MAC && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) && \
      defined(USE_IPV6)
 #    define CURL_MACOS_CALL_COPYPROXIES 1
@@ -475,6 +475,12 @@
 #include <curl/stdcheaders.h>
 #endif
 
+#if defined(HAVE_STDINT_H) || defined(USE_WOLFSSL)
+#include <stdint.h>
+#endif
+
+#include <limits.h>
+
 #ifdef _WIN32
 #  ifdef HAVE_IO_H
 #  include <io.h>
@@ -499,15 +505,6 @@
 #      define struct_stat                  struct _stat
 #    endif
 #    define LSEEK_ERROR                  (long)-1
-#  endif
-#  ifndef UNDER_CE
-     int curlx_win32_stat(const char *path, struct_stat *buffer);
-     int curlx_win32_open(const char *filename, int oflag, ...);
-     FILE *curlx_win32_fopen(const char *filename, const char *mode);
-#    define stat(fname, stp)           curlx_win32_stat(fname, stp)
-#    define open                       curlx_win32_open
-#    define CURL_FOPEN(fname, mode)    curlx_win32_fopen(fname, mode)
-#    define fopen(fname, mode)         CURL_FOPEN(fname, mode)
 #  endif
 #elif defined(__DJGPP__)
    /* Requires DJGPP 2.04 */
@@ -618,21 +615,21 @@
 #  endif
 #endif
 
-#ifndef SIZE_T_MAX
+#ifndef SIZE_MAX
 /* some limits.h headers have this defined, some do not */
 #if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4)
-#define SIZE_T_MAX 18446744073709551615U
+#define SIZE_MAX 18446744073709551615U
 #else
-#define SIZE_T_MAX 4294967295U
+#define SIZE_MAX 4294967295U
 #endif
 #endif
 
-#ifndef SSIZE_T_MAX
+#ifndef SSIZE_MAX
 /* some limits.h headers have this defined, some do not */
 #if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4)
-#define SSIZE_T_MAX 9223372036854775807
+#define SSIZE_MAX 9223372036854775807
 #else
-#define SSIZE_T_MAX 2147483647
+#define SSIZE_MAX 2147483647
 #endif
 #endif
 
@@ -759,8 +756,9 @@
 
 /* Single point where USE_NTLM definition might be defined */
 #ifndef CURL_DISABLE_NTLM
-#  if defined(USE_OPENSSL) || defined(USE_MBEDTLS) ||                   \
+#  if (defined(USE_OPENSSL) && defined(HAVE_DES_ECB_ENCRYPT)) ||        \
   defined(USE_GNUTLS) ||                                                \
+  (defined(USE_MBEDTLS) && defined(HAVE_MBEDTLS_DES_CRYPT_ECB)) ||      \
   defined(USE_OS400CRYPTO) || defined(USE_WIN32_CRYPTO) ||              \
   (defined(USE_WOLFSSL) && defined(HAVE_WOLFSSL_DES_ECB_ENCRYPT))
 #    define USE_CURL_NTLM_CORE
@@ -770,7 +768,7 @@
 #  endif
 #endif
 
-#if defined(USE_LIBSSH2) || defined(USE_LIBSSH) || defined(USE_WOLFSSH)
+#if defined(USE_LIBSSH2) || defined(USE_LIBSSH)
 #define USE_SSH
 #endif
 
@@ -779,20 +777,12 @@
  * Parameters should of course normally not be unused, but for example when
  * we have multiple implementations of the same interface it may happen.
  */
-
 #if defined(__GNUC__) && ((__GNUC__ >= 3) || \
   ((__GNUC__ == 2) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 7)))
-#  define UNUSED_PARAM __attribute__((__unused__))
 #  define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
-#elif defined(__IAR_SYSTEMS_ICC__)
-#  define UNUSED_PARAM __attribute__((__unused__))
-#  if (__VER__ >= 9040001)
-#    define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
-#  else
-#    define WARN_UNUSED_RESULT
-#  endif
+#elif defined(__IAR_SYSTEMS_ICC__) && (__VER__ >= 9040001)
+#  define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #else
-#  define UNUSED_PARAM /* NOTHING */
 #  define WARN_UNUSED_RESULT
 #endif
 
@@ -961,6 +951,10 @@ endings either CRLF or LF so 't' is appropriate.
 
 #define CURL_ARRAYSIZE(A) (sizeof(A)/sizeof((A)[0]))
 
+/* Buffer size for error messages retrieved via
+   curlx_strerror() and Curl_sspi_strerror() */
+#define STRERROR_LEN 256
+
 #ifndef CURL_DID_MEMORY_FUNC_TYPEDEFS /* only if not already done */
 /*
  * The following memory function replacement typedef's are COPIED from
@@ -990,6 +984,8 @@ extern curl_calloc_callback Curl_ccalloc;
 #define Curl_safefree(ptr) \
   do { free((ptr)); (ptr) = NULL;} while(0)
 
+#include <curl/curl.h> /* for CURL_EXTERN, mprintf.h */
+
 #ifdef CURLDEBUG
 #ifdef __clang__
 #  define ALLOC_FUNC         __attribute__((__malloc__))
@@ -1013,8 +1009,6 @@ extern curl_calloc_callback Curl_ccalloc;
 #  define ALLOC_SIZE(s)
 #  define ALLOC_SIZE2(n, s)
 #endif
-
-#include <curl/curl.h> /* for CURL_EXTERN */
 
 extern FILE *curl_dbg_logfile;
 
@@ -1085,6 +1079,21 @@ CURL_EXTERN ALLOC_FUNC
   curl_dbg_getaddrinfo(host, serv, hint, res, __LINE__, __FILE__)
 #define CURL_FREEADDRINFO(data) \
   curl_dbg_freeaddrinfo(data, __LINE__, __FILE__)
+#define CURL_SOCKET(domain,type,protocol) \
+  curl_dbg_socket((int)domain, type, protocol, __LINE__, __FILE__)
+#ifdef HAVE_SOCKETPAIR
+#define CURL_SOCKETPAIR(domain,type,protocol,socket_vector) \
+  curl_dbg_socketpair((int)domain, type, protocol, socket_vector, \
+                      __LINE__, __FILE__)
+#endif
+#define CURL_ACCEPT(sock,addr,len) \
+  curl_dbg_accept(sock, addr, len, __LINE__, __FILE__)
+#ifdef HAVE_ACCEPT4
+#define CURL_ACCEPT4(sock,addr,len,flags) \
+  curl_dbg_accept4(sock, addr, len, flags, __LINE__, __FILE__)
+#endif
+#define CURL_SEND(a,b,c,d) curl_dbg_send(a,b,c,d, __LINE__, __FILE__)
+#define CURL_RECV(a,b,c,d) curl_dbg_recv(a,b,c,d, __LINE__, __FILE__)
 
 #else /* !CURLDEBUG */
 
@@ -1093,6 +1102,16 @@ CURL_EXTERN ALLOC_FUNC
 
 #define CURL_GETADDRINFO getaddrinfo
 #define CURL_FREEADDRINFO freeaddrinfo
+#define CURL_SOCKET socket
+#ifdef HAVE_SOCKETPAIR
+#define CURL_SOCKETPAIR socketpair
+#endif
+#define CURL_ACCEPT accept
+#ifdef HAVE_ACCEPT4
+#define CURL_ACCEPT4 accept4
+#endif
+#define CURL_SEND send
+#define CURL_RECV recv
 
 #endif /* CURLDEBUG */
 

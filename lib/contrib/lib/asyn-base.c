@@ -77,8 +77,6 @@
  *
  * Returns: sockets-in-use-bitmap
  */
-
-
 CURLcode Curl_ares_pollset(struct Curl_easy *data,
                            ares_channel channel,
                            struct easy_pollset *ps)
@@ -90,6 +88,10 @@ CURLcode Curl_ares_pollset(struct Curl_easy *data,
   struct timeval *timeout;
   timediff_t milli;
   CURLcode result = CURLE_OK;
+
+  DEBUGASSERT(channel);
+  if(!channel)
+    return CURLE_FAILED_INIT;
 
   bitmap = ares_getsock(channel, (ares_socket_t *)sockets,
                         CURL_ARRAYSIZE(sockets));
@@ -107,6 +109,8 @@ CURLcode Curl_ares_pollset(struct Curl_easy *data,
   }
 
   timeout = ares_timeout(channel, &maxtime, &timebuf);
+  if(!timeout)
+    timeout = &maxtime;
   milli = curlx_tvtoms(timeout);
   Curl_expire(data, milli, EXPIRE_ASYNC_NAME);
   return result;

@@ -36,8 +36,7 @@
 #include "url.h"
 #include "curlx/strparse.h"
 
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -65,7 +64,7 @@ CURLcode Curl_req_soft_reset(struct SingleRequest *req,
   req->header = FALSE;
   req->headerline = 0;
   req->headerbytecount = 0;
-  req->allheadercount =  0;
+  req->allheadercount = 0;
   req->deductheadercount = 0;
   req->httpversion_sent = 0;
   req->httpversion = 0;
@@ -133,13 +132,13 @@ void Curl_req_hard_reset(struct SingleRequest *req, struct Curl_easy *data)
   req->writebytecount = 0;
   req->start = t0;
   req->headerbytecount = 0;
-  req->allheadercount =  0;
+  req->allheadercount = 0;
   req->deductheadercount = 0;
   req->headerline = 0;
   req->offset = 0;
   req->httpcode = 0;
   req->keepon = 0;
-  req->upgr101 = UPGR101_INIT;
+  req->upgr101 = UPGR101_NONE;
   req->sendbuf_hds_len = 0;
   req->timeofdoc = 0;
   req->location = NULL;
@@ -308,7 +307,7 @@ static CURLcode req_flush(struct Curl_easy *data)
   }
 
   if(data->req.eos_read && !data->req.eos_sent) {
-    char tmp;
+    char tmp = 0;
     size_t nwritten;
     result = xfer_send(data, &tmp, 0, 0, &nwritten);
     if(result)

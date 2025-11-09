@@ -99,10 +99,6 @@ CURLsslset Curl_init_sslset_nolock(curl_sslbackend id, const char *name,
 #define MAX_PINNED_PUBKEY_SIZE 1048576 /* 1MB */
 #endif
 
-#ifndef CURL_SHA256_DIGEST_LENGTH
-#define CURL_SHA256_DIGEST_LENGTH 32 /* fixed size */
-#endif
-
 curl_sslbackend Curl_ssl_backend(void);
 
 /**
@@ -169,6 +165,7 @@ void Curl_ssl_version(char *buffer, size_t size);
 
 /* Certificate information list handling. */
 #define CURL_X509_STR_MAX  100000
+#define MAX_ALLOWED_CERT_AMOUNT 100
 
 void Curl_ssl_free_certinfo(struct Curl_easy *data);
 CURLcode Curl_ssl_init_certinfo(struct Curl_easy *data, int num);

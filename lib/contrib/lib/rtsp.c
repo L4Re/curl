@@ -41,8 +41,8 @@
 #include "cfilters.h"
 #include "strdup.h"
 #include "curlx/strparse.h"
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -278,6 +278,85 @@ static CURLcode rtsp_done(struct Curl_easy *data,
   return httpStatus;
 }
 
+
+static CURLcode rtsp_setup_body(struct Curl_easy *data,
+                                Curl_RtspReq rtspreq,
+                                struct dynbuf *reqp)
+{
+  CURLcode result;
+  if(rtspreq == RTSPREQ_ANNOUNCE ||
+     rtspreq == RTSPREQ_SET_PARAMETER ||
+     rtspreq == RTSPREQ_GET_PARAMETER) {
+    curl_off_t req_clen; /* request content length */
+
+    if(data->state.upload) {
+      req_clen = data->state.infilesize;
+      data->state.httpreq = HTTPREQ_PUT;
+      result = Curl_creader_set_fread(data, req_clen);
+      if(result)
+        return result;
+    }
+    else {
+      if(data->set.postfields) {
+        size_t plen = (data->set.postfieldsize >= 0) ?
+          (size_t)data->set.postfieldsize : strlen(data->set.postfields);
+        req_clen = (curl_off_t)plen;
+        result = Curl_creader_set_buf(data, data->set.postfields, plen);
+      }
+      else if(data->state.infilesize >= 0) {
+        req_clen = data->state.infilesize;
+        result = Curl_creader_set_fread(data, req_clen);
+      }
+      else {
+        req_clen = 0;
+        result = Curl_creader_set_null(data);
+      }
+      if(result)
+        return result;
+    }
+
+    if(req_clen > 0) {
+      /* As stated in the http comments, it is probably not wise to
+       * actually set a custom Content-Length in the headers */
+      if(!Curl_checkheaders(data, STRCONST("Content-Length"))) {
+        result = curlx_dyn_addf(reqp, "Content-Length: %" FMT_OFF_T"\r\n",
+                                req_clen);
+        if(result)
+          return result;
+      }
+
+      if(rtspreq == RTSPREQ_SET_PARAMETER ||
+         rtspreq == RTSPREQ_GET_PARAMETER) {
+        if(!Curl_checkheaders(data, STRCONST("Content-Type"))) {
+          result = curlx_dyn_addn(reqp,
+                                  STRCONST("Content-Type: "
+                                           "text/parameters\r\n"));
+          if(result)
+            return result;
+        }
+      }
+
+      if(rtspreq == RTSPREQ_ANNOUNCE) {
+        if(!Curl_checkheaders(data, STRCONST("Content-Type"))) {
+          result = curlx_dyn_addn(reqp,
+                                  STRCONST("Content-Type: "
+                                           "application/sdp\r\n"));
+          if(result)
+            return result;
+        }
+      }
+    }
+    else if(rtspreq == RTSPREQ_GET_PARAMETER) {
+      /* Check for an empty GET_PARAMETER (heartbeat) request */
+      data->state.httpreq = HTTPREQ_HEAD;
+      data->req.no_body = TRUE;
+    }
+  }
+  else
+    result = Curl_creader_set_null(data);
+  return result;
+}
+
 static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
 {
   struct connectdata *conn = data->conn;
@@ -404,8 +483,8 @@ static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
     if(data->set.str[STRING_RTSP_TRANSPORT]) {
       free(data->state.aptr.rtsp_transport);
       data->state.aptr.rtsp_transport =
-        aprintf("Transport: %s\r\n",
-                data->set.str[STRING_RTSP_TRANSPORT]);
+        curl_maprintf("Transport: %s\r\n",
+                      data->set.str[STRING_RTSP_TRANSPORT]);
       if(!data->state.aptr.rtsp_transport)
         return CURLE_OUT_OF_MEMORY;
     }
@@ -430,7 +509,8 @@ static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
        data->set.str[STRING_ENCODING]) {
       free(data->state.aptr.accept_encoding);
       data->state.aptr.accept_encoding =
-        aprintf("Accept-Encoding: %s\r\n", data->set.str[STRING_ENCODING]);
+        curl_maprintf("Accept-Encoding: %s\r\n",
+                      data->set.str[STRING_ENCODING]);
 
       if(!data->state.aptr.accept_encoding) {
         result = CURLE_OUT_OF_MEMORY;
@@ -467,7 +547,8 @@ static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
   /* Referrer */
   Curl_safefree(data->state.aptr.ref);
   if(data->state.referer && !Curl_checkheaders(data, STRCONST("Referer")))
-    data->state.aptr.ref = aprintf("Referer: %s\r\n", data->state.referer);
+    data->state.aptr.ref = curl_maprintf("Referer: %s\r\n",
+                                         data->state.referer);
 
   p_referrer = data->state.aptr.ref;
 
@@ -478,12 +559,13 @@ static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
    * Go ahead and use the Range stuff supplied for HTTP
    */
   if(data->state.use_range &&
-     (rtspreq  & (RTSPREQ_PLAY | RTSPREQ_PAUSE | RTSPREQ_RECORD))) {
+     (rtspreq & (RTSPREQ_PLAY | RTSPREQ_PAUSE | RTSPREQ_RECORD))) {
 
     /* Check to see if there is a range set in the custom headers */
     if(!Curl_checkheaders(data, STRCONST("Range")) && data->state.range) {
       free(data->state.aptr.rangeline);
-      data->state.aptr.rangeline = aprintf("Range: %s\r\n", data->state.range);
+      data->state.aptr.rangeline = curl_maprintf("Range: %s\r\n",
+                                                 data->state.range);
       p_range = data->state.aptr.rangeline;
     }
   }
@@ -561,79 +643,9 @@ static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
   if(result)
     goto out;
 
-  if(rtspreq == RTSPREQ_ANNOUNCE ||
-     rtspreq == RTSPREQ_SET_PARAMETER ||
-     rtspreq == RTSPREQ_GET_PARAMETER) {
-    curl_off_t req_clen; /* request content length */
-
-    if(data->state.upload) {
-      req_clen = data->state.infilesize;
-      data->state.httpreq = HTTPREQ_PUT;
-      result = Curl_creader_set_fread(data, req_clen);
-      if(result)
-        goto out;
-    }
-    else {
-      if(data->set.postfields) {
-        size_t plen = strlen(data->set.postfields);
-        req_clen = (curl_off_t)plen;
-        result = Curl_creader_set_buf(data, data->set.postfields, plen);
-      }
-      else if(data->state.infilesize >= 0) {
-        req_clen = data->state.infilesize;
-        result = Curl_creader_set_fread(data, req_clen);
-      }
-      else {
-        req_clen = 0;
-        result = Curl_creader_set_null(data);
-      }
-      if(result)
-        goto out;
-    }
-
-    if(req_clen > 0) {
-      /* As stated in the http comments, it is probably not wise to
-       * actually set a custom Content-Length in the headers */
-      if(!Curl_checkheaders(data, STRCONST("Content-Length"))) {
-        result =
-          curlx_dyn_addf(&req_buffer, "Content-Length: %" FMT_OFF_T"\r\n",
-                         req_clen);
-        if(result)
-          goto out;
-      }
-
-      if(rtspreq == RTSPREQ_SET_PARAMETER ||
-         rtspreq == RTSPREQ_GET_PARAMETER) {
-        if(!Curl_checkheaders(data, STRCONST("Content-Type"))) {
-          result = curlx_dyn_addn(&req_buffer,
-                                  STRCONST("Content-Type: "
-                                           "text/parameters\r\n"));
-          if(result)
-            goto out;
-        }
-      }
-
-      if(rtspreq == RTSPREQ_ANNOUNCE) {
-        if(!Curl_checkheaders(data, STRCONST("Content-Type"))) {
-          result = curlx_dyn_addn(&req_buffer,
-                                  STRCONST("Content-Type: "
-                                           "application/sdp\r\n"));
-          if(result)
-            goto out;
-        }
-      }
-    }
-    else if(rtspreq == RTSPREQ_GET_PARAMETER) {
-      /* Check for an empty GET_PARAMETER (heartbeat) request */
-      data->state.httpreq = HTTPREQ_HEAD;
-      data->req.no_body = TRUE;
-    }
-  }
-  else {
-    result = Curl_creader_set_null(data);
-    if(result)
-      goto out;
-  }
+  result = rtsp_setup_body(data, rtspreq, &req_buffer);
+  if(result)
+    goto out;
 
   /* Finish the request buffer */
   result = curlx_dyn_addn(&req_buffer, STRCONST("\r\n"));

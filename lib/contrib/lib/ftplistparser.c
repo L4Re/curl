@@ -52,8 +52,7 @@
 #include "multiif.h"
 #include "curlx/strparse.h"
 
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -186,12 +185,10 @@ static void fileinfo_dtor(void *user, void *element)
   Curl_fileinfo_cleanup(element);
 }
 
-CURLcode Curl_wildcard_init(struct WildcardData *wc)
+void Curl_wildcard_init(struct WildcardData *wc)
 {
   Curl_llist_init(&wc->filelist, fileinfo_dtor);
   wc->state = CURLWC_INIT;
-
-  return CURLE_OK;
 }
 
 void Curl_wildcard_dtor(struct WildcardData **wcp)

@@ -37,8 +37,7 @@
 #include <curl/curl.h>
 #include <librtmp/rtmp.h>
 
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -257,6 +256,11 @@ static CURLcode rtmp_connect(struct Curl_easy *data, bool *done)
   if(!r)
     return CURLE_FAILED_INIT;
 
+  if(conn->sock[FIRSTSOCKET] > INT_MAX) {
+    /* The socket value is invalid for rtmp. */
+    return CURLE_FAILED_INIT;
+  }
+
   r->m_sb.sb_socket = (int)conn->sock[FIRSTSOCKET];
 
   /* We have to know if it is a write before we send the
@@ -307,9 +311,9 @@ static CURLcode rtmp_do(struct Curl_easy *data, bool *done)
 static CURLcode rtmp_done(struct Curl_easy *data, CURLcode status,
                           bool premature)
 {
-  (void)data; /* unused */
-  (void)status; /* unused */
-  (void)premature; /* unused */
+  (void)data;
+  (void)status;
+  (void)premature;
 
   return CURLE_OK;
 }
@@ -334,7 +338,7 @@ static CURLcode rtmp_recv(struct Curl_easy *data, int sockindex, char *buf,
   CURLcode result = CURLE_OK;
   ssize_t nread;
 
-  (void)sockindex; /* unused */
+  (void)sockindex;
   *pnread = 0;
   if(!r)
     return CURLE_FAILED_INIT;
@@ -362,8 +366,8 @@ static CURLcode rtmp_send(struct Curl_easy *data, int sockindex,
   RTMP *r = Curl_conn_meta_get(conn, CURL_META_RTMP_CONN);
   ssize_t nwritten;
 
-  (void)sockindex; /* unused */
-  (void)eos; /* unused */
+  (void)sockindex;
+  (void)eos;
   *pnwritten = 0;
   if(!r)
     return CURLE_FAILED_INIT;
@@ -386,9 +390,9 @@ void Curl_rtmp_version(char *version, size_t len)
   else
     suff[0] = '\0';
 
-  msnprintf(version, len, "librtmp/%d.%d%s",
-            RTMP_LIB_VERSION >> 16, (RTMP_LIB_VERSION >> 8) & 0xff,
-            suff);
+  curl_msnprintf(version, len, "librtmp/%d.%d%s",
+                 RTMP_LIB_VERSION >> 16, (RTMP_LIB_VERSION >> 8) & 0xff,
+                 suff);
 }
 
 #endif  /* USE_LIBRTMP */

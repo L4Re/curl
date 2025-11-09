@@ -25,8 +25,7 @@
 #include "curl_setup.h"
 #include "bufq.h"
 
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 2 #include files should be in this order */
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -147,7 +146,6 @@ static void chunk_list_free(struct buf_chunk **anchor)
     free(chunk);
   }
 }
-
 
 
 void Curl_bufcp_init(struct bufc_pool *pool,
@@ -602,8 +600,7 @@ static CURLcode bufq_slurpn(struct bufq *q, size_t max_len,
       break;
     }
     else if(n == 0) {
-      /* eof */
-      result = CURLE_OK;
+      /* eof, result remains CURLE_OK */
       break;
     }
     *pnread += n;
